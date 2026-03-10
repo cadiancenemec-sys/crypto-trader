@@ -1,0 +1,2112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crypto Trader - Multi-Exchange</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #fff;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    
+    /* Exchange Selector Tabs */
+    .exchange-tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      justify-content: center;
+    }
+    
+    .exchange-tab {
+      padding: 12px 30px;
+      border-radius: 12px;
+      border: 2px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.05);
+      color: #aaa;
+      font-size: 1.1em;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .exchange-tab:hover {
+      background: rgba(255, 255, 255, 0.1);
+      transform: translateY(-2px);
+    }
+    
+    .exchange-tab.active {
+      background: linear-gradient(135deg, #5c27fa, #8b5cf6);
+      border-color: #5c27fa;
+      color: #fff;
+      box-shadow: 0 5px 20px rgba(92, 39, 250, 0.4);
+    }
+    
+    .exchange-tab.kraken.active {
+      background: linear-gradient(135deg, #5c27fa, #8b5cf6);
+      border-color: #5c27fa;
+    }
+    
+    .exchange-tab.binance.active {
+      background: linear-gradient(135deg, #f0b90b, #f7931a);
+      border-color: #f0b90b;
+      color: #000;
+    }
+    
+    /* User Menu - Top Right */
+    .user-menu {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 1000;
+    }
+    
+    .user-icon {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #5c27fa, #8b5cf6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      transition: all 0.3s;
+      font-size: 1.5em;
+    }
+    .user-icon:hover {
+      transform: scale(1.1);
+      box-shadow: 0 5px 20px rgba(92, 39, 250, 0.4);
+    }
+    
+    .user-dropdown {
+      position: absolute;
+      top: 60px;
+      right: 0;
+      background: rgba(26, 26, 46, 0.98);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 15px;
+      min-width: 200px;
+      display: none;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    }
+    .user-dropdown.show { display: block; }
+    
+    .user-dropdown h3 {
+      color: #5c27fa;
+      margin-bottom: 15px;
+      font-size: 1.1em;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 10px;
+    }
+    
+    .dropdown-item {
+      padding: 12px 15px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #fff;
+      text-decoration: none;
+    }
+    .dropdown-item:hover {
+      background: rgba(92, 39, 250, 0.2);
+    }
+    .dropdown-item:first-child { margin-bottom: 5px; }
+    
+    /* Modal Styles */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+      backdrop-filter: blur(5px);
+    }
+    .modal-overlay.show { display: flex; }
+    
+    .modal {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      padding: 30px;
+      max-width: 500px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+    
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 25px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .modal-header h2 {
+      color: #5c27fa;
+      font-size: 1.8em;
+    }
+    .modal-close {
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 1.5em;
+      cursor: pointer;
+      padding: 5px 10px;
+      border-radius: 8px;
+      transition: all 0.3s;
+    }
+    .modal-close:hover {
+      background: rgba(255, 71, 87, 0.2);
+    }
+    
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-group label {
+      display: block;
+      color: #aaa;
+      margin-bottom: 8px;
+      font-size: 0.95em;
+    }
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 12px 15px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+      font-size: 1em;
+    }
+    .form-group input:focus {
+      outline: none;
+      border-color: #5c27fa;
+      background: rgba(255, 255, 255, 0.1);
+    }
+    .form-group small {
+      color: #666;
+      font-size: 0.85em;
+      margin-top: 5px;
+      display: block;
+    }
+    
+    .btn {
+      padding: 15px 30px;
+      border-radius: 8px;
+      border: none;
+      font-size: 1.1em;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #5c27fa, #8b5cf6);
+      color: #fff;
+      width: 100%;
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(92, 39, 250, 0.4);
+    }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      margin-top: 10px;
+      width: 100%;
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+    
+    .api-key-display {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 12px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 0.9em;
+      color: #00ff88;
+      margin-bottom: 10px;
+      word-break: break-all;
+    }
+    
+    .status-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 0.85em;
+      margin-top: 10px;
+    }
+    .status-badge.connected {
+      background: rgba(0, 255, 136, 0.2);
+      color: #00ff88;
+    }
+    .status-badge.disconnected {
+      background: rgba(255, 71, 87, 0.2);
+      color: #ff4757;
+    }
+    
+    header {
+      text-align: center;
+      padding: 30px 0;
+      border-bottom: 2px solid #5c27fa;
+      margin-bottom: 30px;
+    }
+    h1 { font-size: 2.5em; margin-bottom: 10px; }
+    .subtitle { color: #00ff88; font-size: 1.2em; }
+    
+    .status-bar {
+      background: rgba(255, 165, 2, 0.2);
+      border: 1px solid #ffa502;
+      border-radius: 8px;
+      padding: 12px 20px;
+      margin: 20px auto;
+      max-width: 800px;
+      text-align: center;
+      color: #ffa502;
+      font-size: 0.95em;
+    }
+    .status-bar.active {
+      background: rgba(0, 255, 136, 0.2);
+      border-color: #00ff88;
+      color: #00ff88;
+    }
+    
+    .exchange-badge {
+      display: inline-block;
+      padding: 6px 15px;
+      border-radius: 20px;
+      font-size: 0.9em;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+    .exchange-badge.kraken {
+      background: #5c27fa;
+      color: #fff;
+    }
+    .exchange-badge.binance {
+      background: #f0b90b;
+      color: #000;
+    }
+    
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+    
+    .card {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 15px;
+      padding: 25px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+    }
+    .card h2 { color: #5c27fa; margin-bottom: 15px; font-size: 1.5em; }
+    
+    .balance-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .balance-item:last-child { border-bottom: none; }
+    .balance-label { color: #aaa; }
+    .balance-value { font-weight: bold; font-size: 1.2em; }
+    
+    .price-display {
+      font-size: 3em;
+      font-weight: bold;
+      text-align: center;
+      color: #00ff88;
+      margin: 20px 0;
+    }
+    .price-change { text-align: center; color: #aaa; }
+    
+    .trade-form { display: flex; flex-direction: column; gap: 15px; }
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    label { color: #aaa; font-size: 0.9em; }
+    input, select {
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      font-size: 1em;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: #5c27fa;
+    }
+    select option:disabled {
+      color: #666;
+    }
+    
+    .btn-buy {
+      background: linear-gradient(135deg, #00ff88, #00cc6a);
+      color: #000;
+    }
+    .btn-buy:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(0, 255, 136, 0.4); }
+    .btn-sell {
+      background: linear-gradient(135deg, #ff4757, #ff3344);
+      color: #fff;
+    }
+    .btn-sell:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(255, 71, 87, 0.4); }
+    .btn-max {
+      background: linear-gradient(135deg, #ffa502, #ff7f50);
+      color: #000;
+      padding: 10px 20px;
+      font-size: 0.9em;
+    }
+    .btn-max:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(255, 165, 2, 0.4); }
+    
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+    
+    .button-row {
+      display: flex;
+      gap: 10px;
+    }
+    .button-row .btn {
+      flex: 1;
+    }
+    
+    .message {
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 15px;
+      text-align: center;
+    }
+    .message.success { background: rgba(0, 255, 136, 0.2); border: 1px solid #00ff88; }
+    .message.error { background: rgba(255, 71, 87, 0.2); border: 1px solid #ff4757; }
+    
+    .fee-badge {
+      display: inline-block;
+      background: #5c27fa;
+      padding: 5px 15px;
+      border-radius: 20px;
+      font-size: 0.9em;
+      margin-top: 10px;
+    }
+    
+    .loading { text-align: center; padding: 40px; color: #aaa; }
+    
+    .asset-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 0.8em;
+      margin-left: 8px;
+    }
+    .asset-badge.usd { background: #00ff88; color: #000; }
+    .asset-badge.eth { background: #5c27fa; color: #fff; }
+    .asset-badge.btc { background: #f7931a; color: #fff; }
+    .asset-badge.ltc { background: #345d9d; color: #fff; }
+  </style>
+</head>
+<body>
+  <!-- Exchange Selector Tabs -->
+  <div class="exchange-tabs">
+    <div class="exchange-tab kraken active" onclick="switchExchange('kraken')" id="tab-kraken">
+      🟣 Kraken
+    </div>
+    <div class="exchange-tab binance" onclick="switchExchange('binance')" id="tab-binance">
+      🟡 Binance.US
+    </div>
+  </div>
+
+  <!-- User Menu - Top Right -->
+  <div class="user-menu">
+    <div class="user-icon" onclick="toggleDropdown()">👤</div>
+    <div class="user-dropdown" id="userDropdown">
+      <h3>⚙️ Settings</h3>
+      <div class="dropdown-item" onclick="openSettings()">
+        🔑 API Configuration
+      </div>
+      <div class="dropdown-item" onclick="location.reload()">
+        🔄 Refresh Page
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>🔑 API Configuration</h2>
+        <button class="modal-close" onclick="closeSettings()">×</button>
+      </div>
+      
+      <div class="form-group">
+        <label>Current Exchange</label>
+        <div class="exchange-badge" id="currentExchangeBadge">Loading...</div>
+      </div>
+      
+      <div class="form-group">
+        <label>API Key</label>
+        <div class="api-key-display" id="currentApiKey">Loading...</div>
+        <input type="text" id="newApiKey" placeholder="Enter new API key (optional)">
+        <small>Leave blank to keep current key</small>
+      </div>
+      
+      <div class="form-group">
+        <label>API Secret</label>
+        <input type="password" id="newApiSecret" placeholder="Enter new API secret (optional)">
+        <small>Leave blank to keep current secret</small>
+      </div>
+      
+      <div id="connectionStatus">
+        <span class="status-badge disconnected" id="statusBadge">⏳ Testing connection...</span>
+      </div>
+      
+      <button class="btn btn-primary" onclick="saveApiKeys()" style="margin-top: 20px;">
+        💾 Save Configuration
+      </button>
+      <button class="btn btn-secondary" onclick="testConnection()">
+        🧪 Test Connection
+      </button>
+    </div>
+  </div>
+
+  <div class="container">
+    <header>
+      <h1>💱 Crypto Trader</h1>
+      <p class="subtitle">Multi-Exchange Trading Platform</p>
+      <span class="fee-badge" id="feeBadge">Loading fees...</span>
+      
+      <!-- Trading status bar removed - trading is enabled -->
+    </header>
+
+
+
+    <!-- Removed tabs - showing all content -->
+      <div class="grid">
+      <!-- Portfolio Summary -->
+      <div class="card">
+        <h2>💼 Portfolio</h2>
+        <div id="portfolio">
+          <div class="loading">Loading...</div>
+        </div>
+      </div>
+
+      <!-- ETH Price -->
+      <div class="card">
+        <h2>📊 ETH/USD Price</h2>
+        <div id="price" class="price-display">Loading...</div>
+        <div id="priceDetails" class="price-change"></div>
+      </div>
+
+      <!-- Buy ETH -->
+      <div class="card">
+        <h2>🟢 Buy ETH</h2>
+        <div class="trade-form">
+          <div class="form-group">
+            <label>Amount (USD)</label>
+            <input type="number" id="buyAmount" placeholder="100" min="1">
+          </div>
+          <button class="btn btn-buy" onclick="buyETH()">Buy ETH</button>
+          <div id="buyMessage"></div>
+        </div>
+      </div>
+
+      <!-- Sell Assets -->
+      <div class="card">
+        <h2>🔴 Sell Assets</h2>
+        <div class="trade-form">
+          <div class="form-group">
+            <label>Select Asset</label>
+            <select id="sellAsset" onchange="updateSellMax()">
+              <option value="">Choose an asset...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Order Type</label>
+            <select id="sellOrderType" onchange="toggleLimitPrice()">
+              <option value="market">Market Order</option>
+              <option value="limit">Limit Order</option>
+            </select>
+          </div>
+          <div class="form-group" id="limitPriceGroup" style="display: none;">
+            <label>Limit Price (USD)</label>
+            <input type="number" id="limitPrice" placeholder="Enter price" step="0.01" min="0.01">
+            <small>Order will execute at this price or better</small>
+          </div>
+          <div class="form-group">
+            <label>Amount</label>
+            <div class="button-row">
+              <input type="number" id="sellAmount" placeholder="0.001" step="0.001" min="0.0001" style="flex: 2;">
+              <button class="btn btn-max" onclick="setSellMax()" style="flex: 1;">MAX</button>
+            </div>
+            <small id="availableAmount" style="color: #aaa; margin-top: 5px;"></small>
+          </div>
+          <button class="btn btn-sell" onclick="sellAsset()">Sell</button>
+          <div id="sellMessage"></div>
+        </div>
+      </div>
+    </div>
+
+
+
+
+    <!-- Special Trades Section -->
+    <div style="margin-top: 30px;">
+      <div class="card" style="grid-column: 1 / -1;">
+        <h2>🚀 Don's Special Trades</h2>
+          <p style="color: #aaa; margin-bottom: 20px;">One-click automated trading: Buy ETH and set take-profit automatically</p>
+          
+          <div class="form-group">
+            <label>ETH Amount</label>
+            <input type="number" id="specialEthAmount" placeholder="0.1" step="0.001" min="0.001" oninput="calculateSpecialCost()">
+          </div>
+          
+          <div class="form-group">
+            <label>Order Type</label>
+            <select id="specialOrderType" onchange="toggleLimitPriceInput()">
+              <option value="market">Market Order</option>
+              <option value="limit">Limit Order</option>
+            </select>
+          </div>
+          
+          <div class="form-group" id="limitPriceGroup" style="display: none;">
+            <label>Limit Price (USD)</label>
+            <input type="number" id="specialLimitPrice" placeholder="2000.00" step="0.01" min="0.01">
+            <small>Buy will execute when market price reaches this level</small>
+          </div>
+          
+          <div class="form-group">
+            <label>Estimated Cost (USD)</label>
+            <input type="text" id="specialCostEstimate" placeholder="$0.00" readonly style="background: rgba(0, 255, 136, 0.1); border-color: #00ff88; color: #00ff88; font-weight: bold;">
+            <small>Based on <span id="orderTypeDisplay">market</span> price: $<span id="currentPriceDisplay">0.00</span></small>
+          </div>
+          
+          <div class="form-group">
+            <label>Take Profit Target</label>
+            <select id="takeProfitType" onchange="toggleTakeProfitInput()">
+              <option value="percentage">Percentage Gain (%)</option>
+              <option value="price">Specific Price (USD)</option>
+            </select>
+          </div>
+          
+          <div class="form-group" id="takeProfitPercentageGroup">
+            <label>Profit Percentage</label>
+            <input type="number" id="takeProfitPercent" placeholder="5" step="0.1" min="0.1" value="5">
+            <small>Auto-sell all ETH when price increases by this %</small>
+          </div>
+          
+          <div class="form-group" id="takeProfitPriceGroup" style="display: none;">
+            <label>Dollars in Profit (USD)</label>
+            <input type="number" id="takeProfitPrice" placeholder="10" step="0.01" min="0.01" oninput="calculateTargetFromProfit()">
+            <small>Auto-sell when you make this much profit</small>
+            <div id="targetPriceResult"></div>
+          </div>
+          
+          <button class="btn btn-buy" onclick="executeSpecialTrade(event)" style="font-size: 1.2em; padding: 20px 40px;">
+            🚀 Execute Special Trade
+          </button>
+          <div id="specialTradeMessage"></div>
+        </div>
+
+        <!-- Active Special Trades -->
+        <div class="card" style="grid-column: 1 / -1;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 style="color: #5c27fa;">📊 Active Special Trades</h3>
+            <button onclick="loadMyTrades()" style="background: rgba(92, 39, 250, 0.2); border: 1px solid #5c27fa; color: #5c27fa; padding: 8px 15px; border-radius: 8px; cursor: pointer;">
+              🔄 Refresh
+            </button>
+          </div>
+          
+          <div id="activeSpecialTrades">
+            <div class="loading">Loading active trades...</div>
+          </div>
+        </div>
+        
+        <!-- Completed Special Trades (Collapsible) -->
+        <div class="card" style="grid-column: 1 / -1; margin-top: 15px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleCompletedTrades()">
+            <h3 style="color: #00ff88; margin: 0;">✅ Completed Trades</h3>
+            <span id="completedTradesToggle" style="font-size: 1.5em; color: #00ff88;">▼</span>
+          </div>
+          
+          <div id="completedSpecialTrades" style="margin-top: 15px;">
+            <!-- Completed trades will be loaded here -->
+          </div>
+        </div>
+        
+        <script src="simple-trades.js"></script>
+        <script src="execute-trade.js"></script>
+        <script src="calculate-profit.js"></script>
+        
+        <script>
+          // Toggle completed trades section
+          let completedTradesExpanded = true;
+          function toggleCompletedTrades() {
+            completedTradesExpanded = !completedTradesExpanded;
+            const container = document.getElementById('completedSpecialTrades');
+            const toggle = document.getElementById('completedTradesToggle');
+            if (container && toggle) {
+              container.style.display = completedTradesExpanded ? 'block' : 'none';
+              toggle.textContent = completedTradesExpanded ? '▼' : '▶';
+            }
+          }
+        </script>
+      </div>
+    </div>
+
+    <!-- Order History Section (inside Trading tab) -->
+    <div class="grid" style="margin-top: 30px; display: none;" id="order-section-trading">
+      <div class="card">
+        <h2>📋 Current Orders</h2>
+        <div id="currentOrders">
+          <div class="loading">Loading...</div>
+        </div>
+        <button class="btn btn-secondary" onclick="loadCurrentOrders()" style="margin-top: 15px;">
+          🔄 Refresh
+        </button>
+      </div>
+
+      <div class="card">
+        <h2>📜 Order History</h2>
+        <div id="orderHistory">
+          <div class="loading">Loading...</div>
+        </div>
+        <button class="btn btn-secondary" onclick="loadOrderHistory()" style="margin-top: 15px;">
+          🔄 Refresh
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab Switching Script -->
+  <script>
+    function console.log(msg) {
+      const debugText = document.getElementById('debugText');
+      if (debugText) debugText.innerHTML = msg;
+    }
+    
+    function switchTab(tabName) {
+      console.log(`<strong>CLICK!</strong> Switching to: ${tabName}<br>`);
+      
+      // Hide all tabs
+      const tradingTab = document.getElementById('tab-content-trading');
+      const specialTab = document.getElementById('tab-content-special');
+      console.log(`Before: trading=${tradingTab?.style.display}, special=${specialTab?.style.display}<br>`);
+      
+      if (tradingTab) {
+        tradingTab.style.display = 'none';
+        console.log(`Set trading to none ✅<br>`);
+      }
+      if (specialTab) {
+        specialTab.style.display = 'none';
+        console.log(`Set special to none ✅<br>`);
+      }
+      
+      // Show selected tab
+      const selectedTab = document.getElementById(`tab-content-${tabName}`);
+      console.log(`Selected: ${selectedTab ? 'FOUND' : 'NOT FOUND'}<br>`);
+      
+      if (selectedTab) {
+        selectedTab.style.display = 'block';
+        console.log(`✅ SET DISPLAY TO BLOCK!<br>`);
+        console.log(`After: special display = ${specialTab?.style.display}<br>`);
+      }
+      
+      // Highlight active tab
+      const activeTab = document.getElementById(`tab-${tabName}`);
+      if (activeTab) {
+        if (tabName === 'trading') {
+          activeTab.style.background = 'rgba(240, 185, 11, 0.2)';
+          activeTab.style.color = '#f0b90b';
+        } else {
+          activeTab.style.background = 'rgba(92, 39, 250, 0.2)';
+          activeTab.style.color = '#5c27fa';
+        }
+        console.log(`Tab button highlighted ✅<br>`);
+      }
+      
+      // Load special trades if switching to that tab
+      if (tabName === 'special') {
+        console.log(`Tab switched. Click Refresh button below to load trades.<br>`);
+      }
+    }
+  </script>
+
+  <script>
+    const API_BASE = '/api';
+    let balances = { USD: 0, ETH: 0, BTC: 0, LTC: 0 };
+    let currentPrice = 0;
+    let tradingEnabled = false;
+    let currentApiKey = '';
+    let currentExchange = 'kraken';
+
+    // Load data on page load
+    async function loadData() {
+      await loadExchange();
+      await checkTradingStatus();
+      await loadPortfolio();
+      await loadPrice();
+      await loadFees();
+      await loadCurrentApiKey();
+      // Refresh intervals
+      setInterval(loadPrice, 10000);
+      setInterval(loadPortfolio, 30000);
+      setInterval(checkTradingStatus, 60000);
+    }
+
+    // Exchange Management
+    async function loadExchange() {
+      try {
+        const res = await fetch(`${API_BASE}/exchange`);
+        const data = await res.json();
+        currentExchange = data.exchange;
+        updateExchangeTabs();
+      } catch (error) {
+        console.error('Error loading exchange:', error);
+      }
+    }
+
+    function updateExchangeTabs() {
+      document.getElementById('tab-kraken').classList.remove('active');
+      document.getElementById('tab-binance').classList.remove('active');
+      document.getElementById(`tab-${currentExchange}`).classList.add('active');
+    }
+
+    async function switchExchange(exchange) {
+      if (exchange === currentExchange) return;
+      
+      // Show confirmation for Binance.US with disclaimer
+      if (exchange === 'binance') {
+        const confirmed = confirm(
+          'Switch to Binance.US?\n\n' +
+          '⚠️ Note: Binance.US is only accessible from the US.\n' +
+          'If you see an error, your API keys may need:\n' +
+          '• 15-30 minutes to activate (if newly created)\n' +
+          '• Verification that you are on Binance.US (not Binance.com)\n' +
+          '• A US-based IP address (no VPN)\n\n' +
+          'Click OK to switch, or Cancel to stay on Kraken.'
+        );
+        if (!confirmed) return;
+      }
+      
+      try {
+        const res = await fetch(`${API_BASE}/exchange`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ exchange })
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+          location.reload();
+        } else {
+          alert(`❌ Failed to switch: ${data.error}`);
+        }
+      } catch (error) {
+        alert(`❌ Error: ${error.message}`);
+      }
+    }
+
+    // User Dropdown
+    function toggleDropdown() {
+      const dropdown = document.getElementById('userDropdown');
+      dropdown.classList.toggle('show');
+    }
+
+    document.addEventListener('click', (e) => {
+      const userMenu = document.querySelector('.user-menu');
+      if (!userMenu.contains(e.target)) {
+        document.getElementById('userDropdown').classList.remove('show');
+      }
+    });
+
+    // Settings Modal
+    function openSettings() {
+      document.getElementById('settingsModal').classList.add('show');
+      document.getElementById('userDropdown').classList.remove('show');
+      loadCurrentApiKey();
+    }
+
+    function closeSettings() {
+      document.getElementById('settingsModal').classList.remove('show');
+    }
+
+    document.getElementById('settingsModal').addEventListener('click', (e) => {
+      if (e.target.id === 'settingsModal') {
+        closeSettings();
+      }
+    });
+
+    async function loadCurrentApiKey() {
+      try {
+        const res = await fetch(`${API_BASE}/config`);
+        const data = await res.json();
+        if (data.success) {
+          currentApiKey = data.apiKey || '';
+          currentExchange = data.exchange || 'kraken';
+          
+          document.getElementById('currentExchangeBadge').textContent = 
+            currentExchange === 'binance' ? '🟡 Binance.US' : '🟣 Kraken';
+          document.getElementById('currentExchangeBadge').className = 
+            `exchange-badge ${currentExchange}`;
+          
+          document.getElementById('currentApiKey').textContent = currentApiKey || 'Not configured';
+        }
+      } catch (error) {
+        document.getElementById('currentApiKey').textContent = 'Unable to load';
+      }
+    }
+
+    async function testConnection() {
+      const badge = document.getElementById('statusBadge');
+      badge.className = 'status-badge disconnected';
+      badge.textContent = '⏳ Testing...';
+      
+      try {
+        const res = await fetch(`${API_BASE}/test`);
+        const data = await res.json();
+        
+        if (data.success) {
+          badge.className = 'status-badge connected';
+          badge.textContent = '✅ Connection successful!';
+        } else {
+          badge.className = 'status-badge disconnected';
+          badge.textContent = `❌ ${data.error || 'Connection failed'}`;
+        }
+      } catch (error) {
+        badge.className = 'status-badge disconnected';
+        badge.textContent = `❌ ${error.message}`;
+      }
+    }
+
+    async function saveApiKeys() {
+      const newKey = document.getElementById('newApiKey').value.trim();
+      const newSecret = document.getElementById('newApiSecret').value.trim();
+      const btn = event.target;
+      
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+      
+      try {
+        const res = await fetch(`${API_BASE}/config`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            apiKey: newKey || undefined,
+            apiSecret: newSecret || undefined
+          })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          alert('✅ API configuration saved successfully!\n\nThe server will use the new credentials immediately.');
+          closeSettings();
+          loadCurrentApiKey();
+          document.getElementById('newApiKey').value = '';
+          document.getElementById('newApiSecret').value = '';
+          setTimeout(() => location.reload(), 1000);
+        } else {
+          alert(`❌ Failed to save: ${data.error}`);
+        }
+      } catch (error) {
+        alert(`❌ Error: ${error.message}`);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '💾 Save Configuration';
+      }
+    }
+
+    async function loadFees() {
+      try {
+        const res = await fetch(`${API_BASE}/fees`);
+        const data = await res.json();
+        if (data.success) {
+          const fees = data.data;
+          document.getElementById('feeBadge').textContent = 
+            `💰 ${currentExchange === 'binance' ? 'Binance.US' : 'Kraken'}: ${fees.maker * 100}% Maker / ${fees.taker * 100}% Taker`;
+        }
+      } catch (error) {
+        console.error('Error loading fees:', error);
+      }
+    }
+
+    async function checkTradingStatus() {
+      try {
+        const res = await fetch(`${API_BASE}/trading-status`);
+        const data = await res.json();
+        
+        const statusDiv = document.getElementById('tradingStatus');
+        if (!statusDiv) return; // Element removed, skip update
+        
+        tradingEnabled = data.tradingEnabled;
+        
+        if (tradingEnabled) {
+          statusDiv.className = 'status-bar active';
+          statusDiv.innerHTML = '✅ Trading Enabled - Ready to trade!';
+        } else {
+          statusDiv.className = 'status-bar';
+          statusDiv.innerHTML = `⏳ ${data.message || 'API key validation in progress...'}`;
+        }
+      } catch (error) {
+        console.error('Error checking trading status:', error);
+        const statusDiv = document.getElementById('tradingStatus');
+        if (statusDiv) {
+          statusDiv.innerHTML = '⚠️ Unable to check trading status';
+        }
+      }
+    }
+
+    async function loadPortfolio() {
+      try {
+        const res = await fetch(`${API_BASE}/summary`);
+        const data = await res.json();
+        
+        if (data.success) {
+          const s = data.data;
+          balances = s.balances;
+          currentExchange = data.exchange || 'kraken';
+          
+          const assets = [
+            { symbol: 'ETH', balance: balances.ETH, badge: 'eth', display: `${balances.ETH.toFixed(6)} ETH` },
+            { symbol: 'BTC', balance: balances.BTC, badge: 'btc', display: `${balances.BTC.toFixed(6)} BTC` },
+            { symbol: 'LTC', balance: balances.LTC, badge: 'ltc', display: `${balances.LTC.toFixed(6)} LTC` },
+            { symbol: 'USD', balance: balances.USD, badge: 'usd', display: `$${balances.USD.toFixed(2)}` }
+          ];
+          
+          const select = document.getElementById('sellAsset');
+          select.innerHTML = '<option value="">Choose an asset...</option>';
+          
+          assets.forEach(asset => {
+            const option = document.createElement('option');
+            option.value = asset.symbol;
+            option.textContent = `${asset.symbol} - ${asset.display}`;
+            option.dataset.balance = asset.balance;
+            if (asset.balance <= 0) {
+              option.disabled = true;
+              option.textContent += ' (0 balance)';
+            }
+            select.appendChild(option);
+          });
+          
+          document.getElementById('portfolio').innerHTML = `
+            <div class="balance-item">
+              <span class="balance-label">Total Value</span>
+              <span class="balance-value">$${s.totalPortfolioValue.toFixed(2)}</span>
+            </div>
+            <div class="balance-item">
+              <span class="balance-label">USD Balance</span>
+              <span class="balance-value">$${balances.USD.toFixed(2)} <span class="asset-badge usd">USD</span></span>
+            </div>
+            <div class="balance-item">
+              <span class="balance-label">ETH Balance</span>
+              <span class="balance-value">${balances.ETH.toFixed(6)} <span class="asset-badge eth">ETH</span></span>
+            </div>
+            <div class="balance-item">
+              <span class="balance-label">BTC Balance</span>
+              <span class="balance-value">${balances.BTC.toFixed(6)} <span class="asset-badge btc">BTC</span></span>
+            </div>
+            <div class="balance-item">
+              <span class="balance-label">LTC Balance</span>
+              <span class="balance-value">${balances.LTC.toFixed(6)} <span class="asset-badge ltc">LTC</span></span>
+            </div>
+          `;
+        }
+      } catch (error) {
+        console.error('Error loading portfolio:', error);
+      }
+    }
+
+    async function loadPrice() {
+      try {
+        const res = await fetch(`${API_BASE}/price`);
+        const data = await res.json();
+        
+        if (data.success) {
+          const p = data.data;
+          currentPrice = p.last;
+          currentExchange = data.exchange || 'kraken';
+          document.getElementById('price').textContent = `$${p.last.toFixed(2)}`;
+          document.getElementById('priceDetails').innerHTML = `
+            Bid: $${p.bid.toFixed(2)} | Ask: $${p.ask.toFixed(2)} | 
+            24h: $${p.low.toFixed(2)} - $${p.high.toFixed(2)} | 
+            Vol: ${p.volume.toFixed(0)} ETH
+          `;
+        }
+      } catch (error) {
+        console.error('Error loading price:', error);
+      }
+    }
+
+    function updateSellMax() {
+      const select = document.getElementById('sellAsset');
+      const selectedOption = select.options[select.selectedIndex];
+      const availableDiv = document.getElementById('availableAmount');
+      
+      if (select.value && selectedOption.dataset.balance) {
+        const balance = parseFloat(selectedOption.dataset.balance);
+        availableDiv.textContent = `Available: ${select.value === 'USD' ? '$' : ''}${balance.toFixed(6)} ${select.value}`;
+        document.getElementById('sellAmount').placeholder = balance.toFixed(6);
+      } else {
+        availableDiv.textContent = '';
+      }
+    }
+
+    function setSellMax() {
+      const select = document.getElementById('sellAsset');
+      const input = document.getElementById('sellAmount');
+      
+      if (select.value) {
+        const selectedOption = select.options[select.selectedIndex];
+        if (selectedOption.dataset.balance) {
+          const balance = parseFloat(selectedOption.dataset.balance);
+          const maxAmount = select.value === 'USD' ? balance : balance * 0.999;
+          input.value = maxAmount.toFixed(6);
+        }
+      }
+    }
+
+    function toggleLimitPrice() {
+      const orderType = document.getElementById('sellOrderType').value;
+      const limitPriceGroup = document.getElementById('limitPriceGroup');
+      
+      if (orderType === 'limit') {
+        limitPriceGroup.style.display = 'flex';
+        // Pre-fill with current price
+        if (currentPrice > 0) {
+          document.getElementById('limitPrice').value = currentPrice.toFixed(2);
+        }
+      } else {
+        limitPriceGroup.style.display = 'none';
+      }
+    }
+
+    // Don's Special Trades Functions
+    function calculateSpecialCost() {
+      const ethAmount = parseFloat(document.getElementById('specialEthAmount').value);
+      const costInput = document.getElementById('specialCostEstimate');
+      const priceDisplay = document.getElementById('currentPriceDisplay');
+      
+      console.log('calculateSpecialCost called:', { ethAmount, currentPrice });
+      
+      // Update price display
+      if (priceDisplay) {
+        priceDisplay.textContent = currentPrice > 0 ? currentPrice.toFixed(2) : 'Loading...';
+      }
+      
+      if (ethAmount && ethAmount > 0 && currentPrice && currentPrice > 0) {
+        const cost = ethAmount * currentPrice;
+        costInput.value = `$${cost.toFixed(2)}`;
+        console.log('Cost updated:', costInput.value);
+      } else {
+        costInput.value = ethAmount ? 'Loading price...' : '$0.00';
+        console.log('Cannot calculate:', { hasAmount: !!ethAmount, hasPrice: currentPrice > 0 });
+      }
+    }
+
+    function toggleTakeProfitInput() {
+      const type = document.getElementById('takeProfitType').value;
+      const percentGroup = document.getElementById('takeProfitPercentageGroup');
+      const priceGroup = document.getElementById('takeProfitPriceGroup');
+      
+      if (type === 'percentage') {
+        percentGroup.style.display = 'flex';
+        priceGroup.style.display = 'none';
+      } else {
+        percentGroup.style.display = 'none';
+        priceGroup.style.display = 'flex';
+      }
+    }
+
+    async function executeSpecialBuy() {
+      const ethAmount = document.getElementById('specialEthAmount').value;
+      const btn = event.target;
+      const msgDiv = document.getElementById('specialBuyMessage');
+      
+      if (!ethAmount || ethAmount <= 0) {
+        msgDiv.innerHTML = '<div class="message error">Please enter a valid ETH amount</div>';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Executing...';
+
+      try {
+        const res = await fetch(`${API_BASE}/buy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amountETH: parseFloat(ethAmount) })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          msgDiv.innerHTML = `
+            <div class="message success">
+              ✅ Special Buy Executed!<br>
+              Bought ${data.data.ethAmount} ETH @ $${data.data.price.toFixed(2)}<br>
+              Total Cost: $${data.data.amountUSD} | Fee: $${data.data.fee}
+            </div>
+          `;
+          
+          // Auto-fill take profit amount with bought amount
+          document.getElementById('takeProfitEthAmount').value = data.data.ethAmount;
+          
+          // Save to order history (both localStorage and will be fetched from API)
+          saveOrderToHistory({
+            side: 'BUY',
+            symbol: 'ETHUSD',
+            type: 'MARKET',
+            origQty: data.data.ethAmount,
+            executedQty: data.data.ethAmount,
+            price: data.data.price.toFixed(2),
+            avgPrice: data.data.price.toFixed(2),
+            status: 'FILLED',
+            time: new Date().toISOString(),
+            fee: data.data.fee
+          });
+          
+          // Refresh portfolio and orders
+          setTimeout(() => {
+            loadPortfolio();
+            loadCurrentOrders();
+            loadOrderHistory();
+          }, 2000);
+        } else {
+          msgDiv.innerHTML = `<div class="message error">❌ ${data.error}</div>`;
+        }
+      } catch (error) {
+        msgDiv.innerHTML = `<div class="message error">❌ ${error.message}</div>`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🚀 Execute Special Buy';
+      }
+    }
+
+    async function setTakeProfit() {
+      const type = document.getElementById('takeProfitType').value;
+      const ethAmount = document.getElementById('takeProfitEthAmount').value;
+      const btn = event.target;
+      const msgDiv = document.getElementById('takeProfitMessage');
+      
+      if (!ethAmount || ethAmount <= 0) {
+        msgDiv.innerHTML = '<div class="message error">Please enter ETH amount to sell</div>';
+        return;
+      }
+
+      let targetPrice;
+      if (type === 'percentage') {
+        const percent = parseFloat(document.getElementById('takeProfitPercent').value);
+        if (!percent || percent <= 0) {
+          msgDiv.innerHTML = '<div class="message error">Please enter a valid percentage</div>';
+          return;
+        }
+        targetPrice = currentPrice * (1 + percent / 100);
+      } else {
+        targetPrice = parseFloat(document.getElementById('takeProfitPrice').value);
+        if (!targetPrice || targetPrice <= 0) {
+          msgDiv.innerHTML = '<div class="message error">Please enter a valid target price</div>';
+          return;
+        }
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Setting...';
+
+      try {
+        // Store the take profit order (in a real app, this would save to database)
+        const takeProfitOrder = {
+          type: 'take_profit',
+          asset: 'ETH',
+          amount: parseFloat(ethAmount),
+          targetPrice: targetPrice,
+          currentPrice: currentPrice,
+          potentialProfit: ((targetPrice - currentPrice) * ethAmount).toFixed(2),
+          status: 'pending',
+          createdAt: new Date().toISOString()
+        };
+        
+        // Save to localStorage for demo purposes
+        let orders = JSON.parse(localStorage.getItem('specialTrades') || '[]');
+        orders.push(takeProfitOrder);
+        localStorage.setItem('specialTrades', JSON.stringify(orders));
+        
+        msgDiv.innerHTML = `
+          <div class="message success">
+            ✅ Take Profit Order Set!<br>
+            Will sell ${ethAmount} ETH when price reaches $${targetPrice.toFixed(2)}<br>
+            Current: $${currentPrice.toFixed(2)} | Potential Profit: $${takeProfitOrder.potentialProfit}
+          </div>
+        `;
+        
+        // Refresh active trades list
+        loadActiveSpecialTrades();
+        
+      } catch (error) {
+        msgDiv.innerHTML = `<div class="message error">❌ ${error.message}</div>`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '💰 Set Take Profit Order';
+      }
+    }
+
+    // Old function removed - replaced with enhanced async version below
+
+    async function loadCurrentOrders() {
+      const container = document.getElementById('currentOrders');
+      
+      try {
+        const res = await fetch(`${API_BASE}/orders`);
+        const data = await res.json();
+        
+        if (data.success && data.data && Object.keys(data.data).length > 0) {
+          const orders = data.data;
+          container.innerHTML = Object.entries(orders).map(([orderId, order]) => `
+            <div style="background: rgba(92, 39, 250, 0.1); border: 1px solid #5c27fa; border-radius: 8px; padding: 15px; margin-bottom: 10px;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <strong style="color: ${order.side === 'BUY' ? '#00ff88' : '#ff4757'};">
+                    ${order.side} ${order.symbol}
+                  </strong><br>
+                  <small style="color: #aaa;">
+                    Type: ${order.type} | Amount: ${order.origQty} | Price: $${order.price}
+                  </small><br>
+                  <small style="color: #aaa;">
+                    Filled: ${order.executedQty} | Status: 
+                    <span style="color: ${order.status === 'NEW' ? '#00ff88' : '#ffa502'};">${order.status}</span>
+                  </small>
+                </div>
+                <div style="text-align: right;">
+                  <small style="color: #aaa;">${new Date(order.time).toLocaleString()}</small><br>
+                  ${order.status === 'NEW' || order.status === 'PARTIALLY_FILLED' ? `
+                    <button onclick="cancelOrder('${order.symbol}', '${order.orderId}')" style="margin-top: 5px; background: rgba(255, 71, 87, 0.2); border: 1px solid #ff4757; color: #ff4757; padding: 5px 10px; border-radius: 5px; cursor: pointer;">
+                      Cancel
+                    </button>
+                  ` : ''}
+                </div>
+              </div>
+            </div>
+          `).join('');
+        } else {
+          container.innerHTML = '<div class="loading">No open orders</div>';
+        }
+      } catch (error) {
+        container.innerHTML = `<div class="message error">Error loading orders: ${error.message}</div>`;
+      }
+    }
+
+    async function cancelOrder(symbol, orderId) {
+      try {
+        const res = await fetch(`${API_BASE}/cancel-order`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol, orderId })
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+          alert('✅ Order cancelled successfully!');
+          loadCurrentOrders();
+        } else {
+          alert(`❌ Failed to cancel: ${data.error}`);
+        }
+      } catch (error) {
+        alert(`❌ Error: ${error.message}`);
+      }
+    }
+
+    async function loadOrderHistory() {
+      const container = document.getElementById('orderHistory');
+      
+      try {
+        const res = await fetch(`${API_BASE}/order-history`);
+        const data = await res.json();
+        
+        if (data.success && data.data && data.data.length > 0) {
+          const orders = data.data;
+          
+          // Filter to show only FILLED and CANCELED orders (not open/pending)
+          const completedOrders = orders.filter(order => 
+            order.status === 'FILLED' || order.status === 'CANCELED' || order.status === 'EXPIRED'
+          );
+          
+          if (completedOrders.length > 0) {
+            container.innerHTML = completedOrders.slice(0, 20).map(order => `
+            <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 12px; margin-bottom: 8px;">
+              <div style="display: flex; justify-content: space-between;">
+                <div>
+                  <strong style="color: ${order.side === 'BUY' ? '#00ff88' : '#ff4757'};">
+                    ${order.side} ${order.symbol}
+                  </strong>
+                  <small style="color: #aaa; margin-left: 10px;">
+                    ${order.type} | ${order.origQty} @ $${order.price}
+                  </small><br>
+                  <small style="color: #aaa;">
+                    Filled: ${order.executedQty} | Avg Price: $${order.avgPrice || order.price}
+                  </small>
+                </div>
+                <div style="text-align: right;">
+                  <span class="status-badge ${order.status === 'FILLED' ? 'connected' : order.status === 'CANCELED' ? 'disconnected' : ''}">
+                    ${order.status}
+                  </span><br>
+                  <small style="color: #aaa;">${new Date(order.time).toLocaleString()}</small>
+                </div>
+              </div>
+            </div>
+          `).join('');
+          } else {
+            container.innerHTML = '<div class="loading">No completed orders</div>';
+          }
+        } else {
+          container.innerHTML = '<div class="loading">No order history</div>';
+        }
+      } catch (error) {
+        container.innerHTML = `<div class="message error">Error loading history: ${error.message}</div>`;
+      }
+    }
+
+    function saveOrderToHistory(order) {
+      let history = JSON.parse(localStorage.getItem('orderHistory') || '[]');
+      history.unshift(order); // Add to beginning
+      if (history.length > 100) history = history.slice(0, 100); // Keep last 100
+      localStorage.setItem('orderHistory', JSON.stringify(history));
+    }
+
+    async function buyETH() {
+      const amount = document.getElementById('buyAmount').value;
+      const btn = event.target;
+      const msgDiv = document.getElementById('buyMessage');
+      
+      if (!amount || amount <= 0) {
+        msgDiv.innerHTML = '<div class="message error">Please enter a valid amount</div>';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Processing...';
+
+      try {
+        const res = await fetch(`${API_BASE}/buy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amountUSD: parseFloat(amount) })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          msgDiv.innerHTML = `
+            <div class="message success">
+              ✅ Bought ${data.data.ethAmount} ETH<br>
+              Price: $${data.data.price.toFixed(2)} | Fee: $${data.data.fee}
+            </div>
+          `;
+          document.getElementById('buyAmount').value = '';
+          setTimeout(loadPortfolio, 2000);
+        } else {
+          msgDiv.innerHTML = `<div class="message error">❌ ${data.error}</div>`;
+        }
+      } catch (error) {
+        msgDiv.innerHTML = `<div class="message error">❌ ${error.message}</div>`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Buy ETH';
+      }
+    }
+
+    async function sellAsset() {
+      const asset = document.getElementById('sellAsset').value;
+      const amount = document.getElementById('sellAmount').value;
+      const orderType = document.getElementById('sellOrderType').value;
+      const limitPrice = document.getElementById('limitPrice').value;
+      const btn = event.target;
+      const msgDiv = document.getElementById('sellMessage');
+      
+      if (!asset) {
+        msgDiv.innerHTML = '<div class="message error">Please select an asset</div>';
+        return;
+      }
+      
+      if (!amount || amount <= 0) {
+        msgDiv.innerHTML = '<div class="message error">Please enter a valid amount</div>';
+        return;
+      }
+
+      if (orderType === 'limit' && (!limitPrice || limitPrice <= 0)) {
+        msgDiv.innerHTML = '<div class="message error">Please enter a valid limit price</div>';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Processing...';
+
+      try {
+        let endpoint, payload;
+        
+        if (asset === 'ETH') {
+          endpoint = `${API_BASE}/sell`;
+          payload = { 
+            amountETH: parseFloat(amount),
+            orderType: orderType,
+            limitPrice: orderType === 'limit' ? parseFloat(limitPrice) : undefined
+          };
+        } else if (asset === 'BTC') {
+          endpoint = `${API_BASE}/sell-btc`;
+          payload = { 
+            amountBTC: parseFloat(amount),
+            orderType: orderType,
+            limitPrice: orderType === 'limit' ? parseFloat(limitPrice) : undefined
+          };
+        } else if (asset === 'LTC') {
+          endpoint = `${API_BASE}/sell-ltc`;
+          payload = { 
+            amountLTC: parseFloat(amount),
+            orderType: orderType,
+            limitPrice: orderType === 'limit' ? parseFloat(limitPrice) : undefined
+          };
+        } else if (asset === 'USD') {
+          msgDiv.innerHTML = '<div class="message error">Cannot sell USD - use Buy to purchase crypto</div>';
+          btn.disabled = false;
+          btn.textContent = 'Sell';
+          return;
+        }
+        
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          let successMsg = `✅ Sold ${amount} ${asset} (${orderType} order)<br>`;
+          if (data.data.usdReturn) {
+            successMsg += `Price: $${data.data.price.toFixed(2)} | Received: $${data.data.usdReturn} | Fee: $${data.data.fee}`;
+          }
+          msgDiv.innerHTML = `<div class="message success">${successMsg}</div>`;
+          document.getElementById('sellAmount').value = '';
+          document.getElementById('sellAsset').value = '';
+          document.getElementById('availableAmount').textContent = '';
+          setTimeout(loadPortfolio, 2000);
+        } else {
+          msgDiv.innerHTML = `<div class="message error">❌ ${data.error}</div>`;
+        }
+      } catch (error) {
+        msgDiv.innerHTML = `<div class="message error">❌ ${error.message}</div>`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Sell';
+      }
+    }
+
+    // Initialize - ensure DOM is ready (special trades functions are defined below)
+    function initializeApp() {
+      console.log('🚀 Initializing app...');
+      loadData();
+      // loadActiveSpecialTrades() will be called after special trades script loads
+      loadCurrentOrders();
+      loadOrderHistory();
+      
+      // Auto-refresh orders every 5 seconds
+      setInterval(loadCurrentOrders, 5000);
+      
+      console.log('✅ Initialization complete');
+    }
+    
+    // Run immediately if DOM already loaded, otherwise wait
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initializeApp);
+    } else {
+      initializeApp();
+    }
+  </script>
+  
+  <!-- Don's Special Trades Script -->
+  <script>
+    // Initialize special trades after this script loads
+    console.log('🎯 Loading Special Trades module...');
+    if (typeof loadActiveSpecialTrades === 'function') {
+      loadActiveSpecialTrades();
+      setInterval(loadActiveSpecialTrades, 5000);
+      console.log('✅ Special Trades auto-refresh enabled');
+    } else {
+      console.error('❌ loadActiveSpecialTrades not defined!');
+    }
+    // Inline Don's Special Trades functions
+    function calculateSpecialCost() {
+      const ethAmount = parseFloat(document.getElementById('specialEthAmount').value);
+      const costInput = document.getElementById('specialCostEstimate');
+      const priceDisplay = document.getElementById('currentPriceDisplay');
+      
+      priceDisplay.textContent = currentPrice.toFixed(2);
+      
+      const orderType = document.getElementById('specialOrderType').value;
+      let priceToUse = currentPrice;
+      
+      // If limit order and limit price is set, use that instead
+      if (orderType === 'limit') {
+        const limitPrice = parseFloat(document.getElementById('specialLimitPrice').value);
+        if (limitPrice && limitPrice > 0) {
+          priceToUse = limitPrice;
+        }
+      }
+      
+      if (ethAmount && priceToUse > 0) {
+        const cost = ethAmount * priceToUse;
+        costInput.value = `$${cost.toFixed(2)}`;
+      } else {
+        costInput.value = '$0.00';
+      }
+    }
+
+    function toggleLimitPriceInput() {
+      const orderType = document.getElementById('specialOrderType').value;
+      const limitPriceGroup = document.getElementById('limitPriceGroup');
+      const orderTypeDisplay = document.getElementById('orderTypeDisplay');
+      
+      if (orderType === 'limit') {
+        limitPriceGroup.style.display = 'flex';
+        orderTypeDisplay.textContent = 'limit';
+        // Update cost estimate to use limit price if entered
+        calculateSpecialCost();
+      } else {
+        limitPriceGroup.style.display = 'none';
+        orderTypeDisplay.textContent = 'market';
+        // Update cost estimate to use market price
+        calculateSpecialCost();
+      }
+    }
+
+    function toggleTakeProfitInput() {
+      const type = document.getElementById('takeProfitType').value;
+      const percentGroup = document.getElementById('takeProfitPercentageGroup');
+      const priceGroup = document.getElementById('takeProfitPriceGroup');
+      
+      if (type === 'percentage') {
+        percentGroup.style.display = 'flex';
+        priceGroup.style.display = 'none';
+      } else {
+        percentGroup.style.display = 'none';
+        priceGroup.style.display = 'flex';
+      }
+    }
+
+    async function executeSpecialTrade(ev) {
+      alert('🚀 Execute Special Trade clicked! Amount: ' + document.getElementById('specialEthAmount').value);
+      
+      const ethAmount = document.getElementById('specialEthAmount').value;
+      const type = document.getElementById('takeProfitType').value;
+      const btn = ev ? ev.target : document.querySelector('button[onclick*="executeSpecialTrade"]');
+      const msgDiv = document.getElementById('specialTradeMessage');
+      
+      console.log('🚀 Execute Special Trade clicked! Amount:', ethAmount);
+      
+      if (!ethAmount || ethAmount <= 0) {
+        msgDiv.innerHTML = '<div class="message error">Please enter a valid ETH amount</div>';
+        return;
+      }
+
+      let targetPrice;
+      if (type === 'percentage') {
+        const percent = parseFloat(document.getElementById('takeProfitPercent').value);
+        if (!percent || percent <= 0) {
+          msgDiv.innerHTML = '<div class="message error">Please enter a valid percentage</div>';
+          return;
+        }
+        targetPrice = currentPrice * (1 + percent / 100);
+      } else {
+        targetPrice = parseFloat(document.getElementById('takeProfitPrice').value);
+        if (!targetPrice || targetPrice <= 0) {
+          msgDiv.innerHTML = '<div class="message error">Please enter a valid target price</div>';
+          return;
+        }
+      }
+
+      const orderType = document.getElementById('specialOrderType').value;
+      const limitPrice = orderType === 'limit' ? parseFloat(document.getElementById('specialLimitPrice').value) : null;
+      
+      // Validate limit price if limit order selected
+      if (orderType === 'limit' && (!limitPrice || limitPrice <= 0)) {
+        msgDiv.innerHTML = '<div class="message error">Please enter a valid limit price for limit orders</div>';
+        btn.disabled = false;
+        return;
+      }
+
+      btn.disabled = true;
+      const orderTypeText = orderType === 'limit' ? `Limit @ $${limitPrice.toFixed(2)}` : 'Market';
+      btn.innerHTML = `⏳ Step 1/3: Buying ETH (${orderTypeText})...`;
+
+      try {
+        // STEP 1: Execute the buy order
+        console.log('Placing buy order for', ethAmount, 'ETH, type:', orderType, 'limit:', limitPrice);
+        const buyRes = await fetch(`${API_BASE}/buy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            amountETH: parseFloat(ethAmount),
+            orderType: orderType,
+            limitPrice: limitPrice
+          })
+        });
+        
+        const buyData = await buyRes.json();
+        console.log('Buy response:', buyData);
+        
+        if (!buyData.success) {
+          throw new Error(buyData.error || 'Buy order failed');
+        }
+
+        btn.innerHTML = `⏳ Step 2/3: Purchase Complete - Waiting for Confirmation...`;
+        
+        msgDiv.innerHTML = `
+          <div class="message success">
+            ✅ <strong>Step 1 Complete:</strong> Bought ${buyData.data.ethAmount} ETH @ $${buyData.data.price.toFixed(2)}<br>
+            Total Cost: $${buyData.data.amountUSD} | Fee: $${buyData.data.fee}<br>
+            ⏳ Waiting for blockchain confirmation...
+          </div>
+        `;
+
+        // STEP 2: Wait for order confirmation (poll until status is FILLED)
+        const confirmed = await waitForOrderConfirmation(buyData.data.orderId);
+        
+        if (!confirmed) {
+          throw new Error('Order confirmation timeout');
+        }
+
+        btn.innerHTML = `⏳ Step 3/3: Placing Take Profit Order...`;
+        
+        msgDiv.innerHTML += `
+          <div class="message success">
+            ✅ <strong>Step 2 Complete:</strong> Order confirmed on blockchain!<br>
+            🎯 Setting take-profit at $${targetPrice.toFixed(2)}...
+          </div>
+        `;
+
+        // STEP 3: Place the take-profit limit order for FULL amount
+        console.log('Placing sell order for', ethAmount, 'ETH at', targetPrice);
+        const sellRes = await fetch(`${API_BASE}/sell`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amountETH: parseFloat(ethAmount),
+            orderType: 'limit',
+            limitPrice: targetPrice
+          })
+        });
+        
+        const sellData = await sellRes.json();
+        console.log('Sell response:', sellData);
+        
+        if (sellData.success) {
+          msgDiv.innerHTML += `
+            <div class="message success">
+              ✅ <strong>Step 3 Complete:</strong> Take Profit Order Placed!<br>
+              🎯 Will sell ALL ${ethAmount} ETH when price reaches $${targetPrice.toFixed(2)}<br>
+              💰 Potential Profit: $${((targetPrice - currentPrice) * ethAmount).toFixed(2)}<br>
+              <br>
+              🎉 <strong>Special Trade Complete!</strong>
+            </div>
+          `;
+          
+          // Save to active special trades
+          const specialTrade = {
+            type: 'special_trade',
+            asset: 'ETH',
+            buyAmount: parseFloat(ethAmount),
+            buyPrice: buyData.data.price,
+            buyFee: buyData.data.fee,
+            buyTime: new Date().toISOString(),
+            targetPrice: targetPrice,
+            targetProfit: ((targetPrice - currentPrice) * ethAmount).toFixed(2),
+            status: 'active',
+            sellOrderId: sellData.data.orderId
+          };
+          
+          saveSpecialTrade(specialTrade);
+          loadActiveSpecialTrades();
+          
+          btn.innerHTML = '✅ Trade Complete!';
+          setTimeout(() => {
+            btn.disabled = false;
+            btn.innerHTML = '🚀 Execute Special Trade';
+          }, 3000);
+          
+          // Refresh portfolio
+          setTimeout(loadPortfolio, 2000);
+          
+        } else {
+          throw new Error(`Take profit order failed: ${sellData.error}`);
+        }
+        
+      } catch (error) {
+        console.error('Special trade error:', error);
+        msgDiv.innerHTML = `<div class="message error">❌ Error: ${error.message}</div>`;
+        btn.disabled = false;
+        btn.innerHTML = '🚀 Execute Special Trade';
+      }
+    }
+
+    async function waitForOrderConfirmation(orderId, maxAttempts = 30) {
+      console.log('Waiting for order confirmation, orderId:', orderId);
+      for (let i = 0; i < maxAttempts; i++) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        try {
+          // Check open orders first
+          const openRes = await fetch(`${API_BASE}/orders`);
+          const openData = await openRes.json();
+          console.log('Poll attempt', i+1, '- Open orders:', openData);
+          
+          if (openData.success && openData.data) {
+            const order = openData.data[orderId];
+            if (order && order.status === 'FILLED') {
+              console.log('Order confirmed in open orders!');
+              return true;
+            }
+            // Also check if it's partially filled or new
+            if (order && (order.status === 'PARTIALLY_FILLED' || order.status === 'NEW')) {
+              console.log('Order still open, status:', order.status);
+              continue;
+            }
+          }
+          
+          // If not in open orders, check order history (might have filled instantly)
+          const historyRes = await fetch(`${API_BASE}/order-history`);
+          const historyData = await historyRes.json();
+          console.log('Poll attempt', i+1, '- Order history count:', historyData.data?.length || 0);
+          
+          if (historyData.success && historyData.data) {
+            const filledOrder = historyData.data.find(o => o.orderId == orderId);
+            if (filledOrder && filledOrder.status === 'FILLED') {
+              console.log('Order confirmed in history!');
+              return true;
+            }
+          }
+          
+        } catch (error) {
+          console.log('Polling error:', error.message);
+        }
+      }
+      return false;
+    }
+
+    function saveSpecialTrade(trade) {
+      let trades = JSON.parse(localStorage.getItem('specialTrades') || '[]');
+      trades.unshift(trade);
+      localStorage.setItem('specialTrades', JSON.stringify(trades));
+      console.log('✅ Saved special trade to localStorage:', trade);
+      
+      // Backup: Also save to file via API
+      fetch(`${API_BASE}/backup-special-trades`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trades })
+      }).catch(err => console.log('Backup save skipped (optional):', err));
+    }
+
+    async function loadActiveSpecialTrades() {
+      const debugText = document.getElementById('debugText');
+      if (debugText) debugText.innerHTML += '<br>🎯 loadActiveSpecialTrades() starting...';
+      
+      const container = document.getElementById('activeSpecialTrades');
+      if (debugText) debugText.innerHTML += `<br>Container: ${container ? 'FOUND ✅' : 'NOT FOUND ❌'}`;
+      
+      if (!container) {
+        if (debugText) debugText.innerHTML += '<br>ERROR: Container not in DOM!';
+        return;
+      }
+      
+      container.innerHTML = '<div class="loading">Loading...</div>';
+      
+      // Try to load from backup
+      let trades = [];
+      try {
+        if (debugText) debugText.innerHTML += '<br>Fetching backup...';
+        const backupRes = await fetch(`${API_BASE}/backup-special-trades`);
+        const backupData = await backupRes.json();
+        if (debugText) debugText.innerHTML += `<br>Backup: ${backupData.success ? 'SUCCESS' : 'FAILED'}, Count: ${backupData.data?.length || 0}`;
+        
+        if (backupData.success && backupData.data && backupData.data.length > 0) {
+          trades = backupData.data;
+          localStorage.setItem('specialTrades', JSON.stringify(trades));
+          if (debugText) debugText.innerHTML += `<br>✅ Loaded ${trades.length} from backup`;
+        }
+      } catch (e) {
+        if (debugText) debugText.innerHTML += `<br>Backup error: ${e.message}`;
+      }
+      
+      if (trades.length === 0) {
+        trades = JSON.parse(localStorage.getItem('specialTrades') || '[]');
+        if (debugText) debugText.innerHTML += `<br>📋 Loaded ${trades.length} from localStorage`;
+      }
+      
+      if (debugText) debugText.innerHTML += `<br>Rendering ${trades.length} trades...`;
+      
+      if (trades.length === 0) {
+        container.innerHTML = '<div class="loading">No trades</div>';
+        if (debugText) debugText.innerHTML += '<br>No trades to display';
+        return;
+      }
+      
+      try {
+        if (debugText) debugText.innerHTML += '<br>Starting render...';
+        container.innerHTML = trades.map((trade, index) => {
+          if (debugText) debugText.innerHTML += `<br>Processing trade ${index}...`;
+          if (!trade.buyPrice || !trade.targetPrice) {
+            if (debugText) debugText.innerHTML += `<br>Skipping trade ${index}: invalid`;
+            return '';
+          }
+      
+      if (!container) {
+        console.log(`ERROR: activeSpecialTrades container not in DOM!<br>`);
+        return;
+      }
+      
+      container.innerHTML = '<div class="loading">Loading trades...</div>';
+      
+      // Try to load from backup first, then localStorage
+      let trades = [];
+      try {
+        const backupRes = await fetch(`${API_BASE}/backup-special-trades`);
+        const backupData = await backupRes.json();
+        console.log(`Backup API: ${backupData.success ? 'SUCCESS' : 'FAILED'}, Count: ${backupData.data?.length || 0}<br>`);
+        
+        if (backupData.success && backupData.data && backupData.data.length > 0) {
+          trades = backupData.data;
+          localStorage.setItem('specialTrades', JSON.stringify(trades));
+          console.log(`✅ Loaded ${trades.length} trades from backup<br>`);
+        }
+      } catch (e) {
+        console.log(`Backup fetch error: ${e.message}<br>`);
+      }
+      
+      // Fallback to localStorage if backup empty
+      if (trades.length === 0) {
+        trades = JSON.parse(localStorage.getItem('specialTrades') || '[]');
+        console.log(`📋 Loaded ${trades.length} trades from localStorage<br>`);
+      }
+      
+      if (trades.length === 0) {
+        container.innerHTML = '<div class="loading">No special trades</div>';
+        console.log(`No trades to display<br>`);
+        return;
+      }
+      
+      console.log(`Rendering ${trades.length} trades...<br>`);
+      
+      // Fetch current orders to get real-time status
+      let currentOrders = {};
+      try {
+        const ordersRes = await fetch(`${API_BASE}/orders`);
+        const ordersData = await ordersRes.json();
+        if (ordersData.success && ordersData.data) {
+          currentOrders = ordersData.data;
+        }
+      } catch (e) {
+        console.log('Error fetching current orders:', e);
+      }
+      
+      console.log(`Fetching current orders...<br>`);
+      
+      // Fetch current orders to get real-time status
+      let currentOrders = {};
+      try {
+        const ordersRes = await fetch(`${API_BASE}/orders`);
+        const ordersData = await ordersRes.json();
+        if (ordersData.success && ordersData.data) {
+          currentOrders = ordersData.data;
+        }
+        console.log(`Current orders loaded<br>`);
+      } catch (e) {
+        console.log(`Orders error: ${e.message}<br>`);
+      }
+      
+      console.log(`Trade details:<br>`);
+      trades.forEach((t, i) => {
+        const valid = t.buyPrice && t.targetPrice ? '✅' : '❌';
+        console.log(`${valid} #${i+1}: ${t.buyAmount || 'N/A'} ETH @ ${t.buyPrice || 'MISSING'}<br>`);
+      });
+      
+      try {
+        console.log(`Starting render...<br>`);
+        container.innerHTML = trades.map((trade, index) => {
+          console.log(`Processing trade ${index}...<br>`);
+          // Safety check - skip invalid trades
+          if (!trade.buyPrice || !trade.targetPrice) {
+            console.log(`Skipping trade ${index}: invalid data<br>`);
+            return '';
+          }
+        
+        // Determine buy status
+        let buyStatus = 'FILLED';
+        let buyStatusColor = '#00ff88';
+        
+        // Determine sell status
+        let sellStatus = 'PENDING';
+        let sellStatusColor = '#ffa502';
+        let sellFilledQty = 0;
+        let sellExecutedValue = 0;
+        
+        if (trade.sellOrderId && currentOrders[trade.sellOrderId]) {
+          const sellOrder = currentOrders[trade.sellOrderId];
+          sellStatus = sellOrder.status;
+          sellFilledQty = parseFloat(sellOrder.executedQty || 0);
+          sellExecutedValue = parseFloat(sellOrder.cummulativeQuoteQty || 0);
+          
+          if (sellStatus === 'FILLED') {
+            sellStatusColor = '#00ff88';
+          } else if (sellStatus === 'PARTIALLY_FILLED') {
+            sellStatusColor = '#00ff88';
+          }
+        }
+        
+        // Calculate totals (including fees)
+        const totalCost = (trade.buyAmount * trade.buyPrice).toFixed(2);
+        const buyFee = parseFloat(trade.buyFee) || 0;
+        const totalInvested = (parseFloat(totalCost) + buyFee).toFixed(2);
+        const currentProfit = sellExecutedValue > 0 ? (sellExecutedValue - parseFloat(totalInvested)).toFixed(2) : trade.targetProfit;
+        const profitColor = parseFloat(currentProfit) >= 0 ? '#00ff88' : '#ff4757';
+        
+        return `
+        <div style="background: linear-gradient(135deg, rgba(92, 39, 250, 0.15) 0%, rgba(92, 39, 250, 0.05) 100%); border: 2px solid #5c27fa; border-radius: 12px; padding: 20px; margin-bottom: 15px;">
+          <!-- Header -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid rgba(92, 39, 250, 0.3);">
+            <div>
+              <strong style="color: #5c27fa; font-size: 1.2em;">🎯 Special Trade #${trades.length - index}</strong>
+              <span class="status-badge" style="margin-left: 10px; background: ${sellStatus === 'FILLED' ? 'rgba(0, 255, 136, 0.2)' : 'rgba(255, 165, 2, 0.2)'}; color: ${sellStatus === 'FILLED' ? '#00ff88' : '#ffa502'};">
+                ${sellStatus === 'FILLED' ? '✅ COMPLETED' : '⏳ ACTIVE'}
+              </span>
+            </div>
+            <div style="text-align: right;">
+              <small style="color: #aaa;">${new Date(trade.buyTime).toLocaleString()}</small><br>
+              ${trade.status === 'active' ? `
+                <button onclick="cancelSpecialTrade(${index})" style="margin-top: 5px; background: rgba(255, 71, 87, 0.2); border: 1px solid #ff4757; color: #ff4757; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 0.85em;">
+                  ❌ Cancel
+                </button>
+              ` : ''}
+            </div>
+          </div>
+          
+          <!-- Two Column Layout -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <!-- Left Column - BUY -->
+            <div>
+              <h4 style="color: #00ff88; margin-bottom: 10px; font-size: 1.1em;">🟢 BUY Order</h4>
+              <div style="background: rgba(0, 255, 136, 0.05); border-radius: 8px; padding: 12px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                  <span style="color: #aaa;">Amount:</span>
+                  <span style="color: #fff; font-weight: bold;">${trade.buyAmount} ETH</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                  <span style="color: #aaa;">Price:</span>
+                  <span style="color: #fff;">$${(trade.buyPrice || 0).toFixed(2)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                  <span style="color: #aaa;">Total Cost:</span>
+                  <span style="color: #fff; font-weight: bold;">$${totalCost}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                  <span style="color: #aaa;">Fee/Commission:</span>
+                  <span style="color: #ffa502; font-weight: bold;">$${(parseFloat(trade.buyFee) || 0).toFixed(4)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px solid rgba(0, 255, 136, 0.2);">
+                  <span style="color: #aaa;">Status:</span>
+                  <span class="status-badge connected" style="font-size: 0.8em;">${buyStatus}</span>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Right Column - SELL -->
+            <div>
+              <h4 style="color: #ffa502; margin-bottom: 10px; font-size: 1.1em;">🎯 TAKE PROFIT</h4>
+              <div style="background: rgba(255, 165, 2, 0.05); border-radius: 8px; padding: 12px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                  <span style="color: #aaa;">Target Price:</span>
+                  <span style="color: #fff; font-weight: bold;">$${(trade.targetPrice || 0).toFixed(2)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                  <span style="color: #aaa;">Amount:</span>
+                  <span style="color: #fff;">${trade.buyAmount} ETH</span>
+                </div>
+                ${sellExecutedValue > 0 ? `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                  <span style="color: #aaa;">Sold:</span>
+                  <span style="color: #00ff88;">${sellFilledQty.toFixed(4)} ETH</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                  <span style="color: #aaa;">Received:</span>
+                  <span style="color: #00ff88; font-weight: bold;">$${sellExecutedValue.toFixed(2)}</span>
+                </div>
+                ` : ''}
+                <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px solid rgba(255, 165, 2, 0.2);">
+                  <span style="color: #aaa;">Status:</span>
+                  <span class="status-badge" style="font-size: 0.8em; background: ${sellStatusColor}20; color: ${sellStatusColor};">${sellStatus}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Profit Summary -->
+          <div style="margin-top: 15px; padding: 15px; background: ${parseFloat(currentProfit) >= 0 ? 'rgba(0, 255, 136, 0.1)' : 'rgba(255, 71, 87, 0.1)'}; border-radius: 8px; text-align: center;">
+            <div style="color: #aaa; margin-bottom: 5px; font-size: 0.9em;">💰 Net Profit/Loss (after fees)</div>
+            <div style="font-size: 2em; font-weight: bold; color: ${profitColor};">
+              ${parseFloat(currentProfit) >= 0 ? '+' : ''}$${currentProfit}
+            </div>
+            ${sellExecutedValue > 0 ? `
+            <div style="color: #aaa; font-size: 0.85em; margin-top: 5px;">
+              ROI: ${((parseFloat(currentProfit) / totalInvested) * 100).toFixed(2)}%
+            </div>
+            <div style="color: #aaa; font-size: 0.75em; margin-top: 3px;">
+              Total Invested: $${totalInvested} (incl. $${(parseFloat(trade.buyFee) || 0).toFixed(4)} fee)
+            </div>
+            ` : `
+            <div style="color: #aaa; font-size: 0.85em; margin-top: 5px;">
+              Potential profit (fee: $${(parseFloat(trade.buyFee) || 0).toFixed(4)})
+            </div>
+            `}
+          </div>
+        </div>
+        `;
+      }).filter(t => t).join('');
+      
+      if (debugText) debugText.innerHTML += '<br>✅ Render complete!';
+      
+      } catch (error) {
+        console.error('Rendering error:', error);
+        if (debugText) debugText.innerHTML += `<br>❌ RENDER ERROR: ${error.message}`;
+        container.innerHTML = `<div class="message error">Error: ${error.message}</div>`;
+      }
+    }
+
+    function cancelSpecialTrade(index) {
+      let trades = JSON.parse(localStorage.getItem('specialTrades') || '[]');
+      trades.splice(index, 1);
+      localStorage.setItem('specialTrades', JSON.stringify(trades));
+      loadActiveSpecialTrades();
+    }
+  </script>
+  
+</body>
+</html>
