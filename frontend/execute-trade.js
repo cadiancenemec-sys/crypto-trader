@@ -102,6 +102,7 @@ async function executeSpecialTrade(ev) {
     // For market orders, wait for fill then place take-profit
     if (orderType === 'limit') {
       // Save as pending limit order
+      const pctGain = (((targetPrice - limitPrice) / limitPrice) * 100).toFixed(2);
       const pendingTrade = {
         type: 'pending_limit',
         asset: 'ETH',
@@ -109,17 +110,43 @@ async function executeSpecialTrade(ev) {
         limitPrice: limitPrice,
         orderId: buyData.data.orderId,
         targetPrice: targetPrice,
-        targetProfit: ((targetPrice - limitPrice) * ethAmount).toFixed(2),
+        targetProfitPct: pctGain,
+        targetProfitDollar: ((targetPrice - limitPrice) * ethAmount).toFixed(2),
         status: 'pending',
         placedTime: new Date().toISOString()
       };
       
-      // Save to pending orders
+      // Save to backend pending-orders.json
+      try {
+        const saveRes = await fetch('/api/save-pending-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId: buyData.data.orderId,
+            ethAmount: ethAmount,
+            limitPrice: limitPrice,
+            targetPrice: targetPrice,
+            targetProfitPct: pctGain,
+            targetProfitDollar: pendingTrade.targetProfitDollar
+          })
+        });
+        
+        const saveData = await saveRes.json();
+        if (saveData.success) {
+          console.log('✅ Limit order saved to backend! Order ID:', saveData.orderId);
+        } else {
+          console.error('❌ Failed to save to backend:', saveData.error);
+        }
+      } catch (err) {
+        console.error('❌ Error calling save-pending-order API:', err);
+      }
+      
+      // Also save to localStorage for frontend display
       let pending = JSON.parse(localStorage.getItem('pendingLimitOrders') || '[]');
       pending.unshift(pendingTrade);
       localStorage.setItem('pendingLimitOrders', JSON.stringify(pending));
       
-      console.log('✅ Limit order saved as pending! Total pending:', pending.length);
+      console.log('✅ Limit order saved! Total pending:', pending.length);
       console.log('📋 Pending orders:', pending.map(p => `${p.buyAmount} ETH @ $${p.limitPrice}`));
       
       if (msgDiv) {
@@ -129,7 +156,7 @@ async function executeSpecialTrade(ev) {
             📊 Order: ${buyData.data.ethAmount} ETH @ $${limitPrice.toFixed(2)}<br>
             🎯 Take-profit will be placed at $${targetPrice.toFixed(2)} when order fills<br>
             ⏳ Status: Pending (waiting for price to reach $${limitPrice.toFixed(2)})<br>
-            💰 Potential Profit: $${pendingTrade.targetProfit}<br>
+            💰 Potential Profit: ${pctGain}% ($${pendingTrade.targetProfitDollar})<br>
             <br>
             📋 Added to "Pending Limit Orders" section<br>
             🚀 You can place more orders now!
@@ -379,6 +406,8 @@ async function loadPendingOrders() {
   
   let html = '';
   pending.forEach((trade, idx) => {
+    const pctGain = trade.targetProfitPct || (((trade.targetPrice - trade.limitPrice) / trade.limitPrice) * 100).toFixed(2);
+    const dollarProfit = trade.targetProfitDollar || ((trade.targetPrice - trade.limitPrice) * trade.buyAmount).toFixed(2);
     html += `
       <div class="trade-card" style="background: rgba(255, 165, 0, 0.1); border-left: 3px solid #ffa500; padding: 15px; margin-bottom: 10px;">
         <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -386,7 +415,7 @@ async function loadPendingOrders() {
             <strong style="color: #ffa500;">⏳ Pending Order #${idx + 1}</strong><br>
             📊 ${trade.buyAmount} ETH @ $${trade.limitPrice.toFixed(2)}<br>
             🎯 Take-profit: $${trade.targetPrice.toFixed(2)}<br>
-            💰 Potential Profit: $${trade.targetProfit}<br>
+            💰 Potential Profit: ${pctGain}% ($${dollarProfit})<br>
             ⏳ Status: ${trade.status.toUpperCase()}
           </div>
           <button onclick="cancelPendingOrder(${idx})" style="background: rgba(255, 69, 58, 0.2); border: 1px solid #ff453a; color: #ff453a; padding: 8px 15px; border-radius: 8px; cursor: pointer;">

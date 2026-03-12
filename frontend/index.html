@@ -497,6 +497,11 @@
       <p class="subtitle">Multi-Exchange Trading Platform</p>
       <span class="fee-badge" id="feeBadge">Loading fees...</span>
       
+      <!-- Cache Clear Button -->
+      <button onclick="clearCacheAndReload()" style="position:absolute;top:10px;right:10px;background:rgba(255,69,58,0.2);border:1px solid #ff453a;color:#ff453a;padding:8px 15px;border-radius:8px;cursor:pointer;font-size:0.85em;" title="Clear browser cache and reload">
+        🔄 Clear Cache & Reload
+      </button>
+      
       <!-- Trading status bar removed - trading is enabled -->
     </header>
 
@@ -508,6 +513,17 @@
       <div class="card">
         <h2>💼 Portfolio</h2>
         <div id="portfolio">
+          <div class="loading">Loading...</div>
+        </div>
+      </div>
+
+      <!-- Current Profit -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h2 style="margin: 0;">💰 Current Profit</h2>
+          <button onclick="loadCurrentProfit()" style="background: rgba(255,165,0,0.2); border: 1px solid #ffa500; color: #ffa500; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;" title="Refresh profit data">🔄 Refresh</button>
+        </div>
+        <div id="currentProfit">
           <div class="loading">Loading...</div>
         </div>
       </div>
@@ -636,14 +652,27 @@
         <div class="card" style="grid-column: 1 / -1;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
             <h3 style="color: #ffa500;">⏳ Pending Limit Orders</h3>
-            <button onclick="loadPendingOrders()" style="background: rgba(255, 165, 0, 0.2); border: 1px solid #ffa500; color: #ffa500; padding: 8px 15px; border-radius: 8px; cursor: pointer;">
+            <button onclick="refreshPendingFrame()" style="background: rgba(255, 165, 0, 0.2); border: 1px solid #ffa500; color: #ffa500; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-size: 0.9em;">
               🔄 Refresh
             </button>
           </div>
           
-          <div id="pendingLimitOrders">
-            <div class="loading">Loading pending orders...</div>
-          </div>
+          <iframe src="/pending.html" style="width:100%;height:350px;border:none;overflow:hidden;" id="pendingFrame" onload="resizeIframe(this)"></iframe>
+          
+          <script>
+            function refreshPendingFrame() {
+              const iframe = document.getElementById('pendingFrame');
+              iframe.src = '/pending.html?t=' + Date.now();
+            }
+            
+            function resizeIframe(iframe) {
+              window.addEventListener('message', function(e) {
+                if (e.data.type === 'resize') {
+                  iframe.style.height = (e.data.height + 10) + 'px';
+                }
+              }, false);
+            }
+          </script>
         </div>
 
         <!-- Active Special Trades -->
@@ -672,8 +701,8 @@
           </div>
         </div>
         
-        <script src="simple-trades.js"></script>
-        <script src="execute-trade.js" async></script>
+        <script src="simple-trades.js?v=7"></script>
+        <script src="execute-trade.js?v=5" async></script>
         <script>
           // Wait for external script to load, THEN override
           setTimeout(function() {
@@ -724,14 +753,27 @@
                   
                   // For limit orders: Save to pending and return immediately
                   if (orderType === 'limit') {
+                    // Calculate target price and profit
+                    let targetPrice, pctGain;
+                    if (type === 'percentage') {
+                      const percent = parseFloat(document.getElementById('takeProfitPercent').value);
+                      targetPrice = limitPrice * (1 + percent / 100);
+                      pctGain = percent;
+                    } else {
+                      const desiredProfit = parseFloat(document.getElementById('takeProfitPrice').value);
+                      targetPrice = limitPrice + (desiredProfit / parseFloat(ethAmount));
+                      pctGain = ((targetPrice - limitPrice) / limitPrice * 100).toFixed(2);
+                    }
+                    
                     const pendingTrade = {
                       type: 'pending_limit',
                       asset: 'ETH',
                       buyAmount: parseFloat(ethAmount),
                       limitPrice: limitPrice,
                       orderId: buyData.data.orderId,
-                      targetPrice: type === 'percentage' ? parseFloat(document.getElementById('takeProfitPercent').value) : parseFloat(document.getElementById('takeProfitPrice').value),
-                      targetProfit: ((buyData.data.price - limitPrice) * ethAmount).toFixed(2),
+                      targetPrice: targetPrice,
+                      targetProfitPct: pctGain,
+                      targetProfitDollar: ((targetPrice - limitPrice) * ethAmount).toFixed(2),
                       status: 'pending',
                       placedTime: new Date().toISOString()
                     };
@@ -740,17 +782,26 @@
                     pending.unshift(pendingTrade);
                     localStorage.setItem('pendingLimitOrders', JSON.stringify(pending));
                     
+                    // ALSO save to backend for persistence
+                    fetch('/api/pending-orders', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ order: pendingTrade })
+                    }).catch(e => console.log('⚠️ Backend save skipped:', e.message));
+                    
                     console.log('✅ Limit order saved as pending! Total pending:', pending.length);
                     console.log('localStorage:', localStorage.getItem('pendingLimitOrders'));
                     
                     if (msgDiv) {
+                      // Use buyData.data.ethAmount instead of local ethAmount (which has the bug)
+                      const actualEthAmount = buyData.data.ethAmount || ethAmount;
                       msgDiv.innerHTML = `
                         <div class="message success">
                           ✅ <strong>Limit Order Placed!</strong><br>
-                          📊 Order: ${ethAmount} ETH @ $${limitPrice.toFixed(2)}<br>
-                          🎯 Take-profit will be placed at $${pendingTrade.targetPrice} when order fills<br>
+                          📊 Order: ${actualEthAmount} ETH @ $${limitPrice.toFixed(2)}<br>
+                          🎯 Take-profit will be placed at $${targetPrice.toFixed(2)} when order fills<br>
                           ⏳ Status: Pending (waiting for price to reach $${limitPrice.toFixed(2)})<br>
-                          💰 Potential Profit: $${pendingTrade.targetProfit}<br>
+                          💰 Potential Profit: ${pctGain}% ($${pendingTrade.targetProfitDollar})<br>
                           <br>
                           📋 Added to "Pending Limit Orders" section<br>
                           🚀 You can place more orders now!
@@ -766,7 +817,11 @@
                       }, 3000);
                     }
                     
-                    // Reload pending orders immediately
+                    // Reload pending orders immediately - refresh iframe
+                    const iframe = document.getElementById('pendingFrame');
+                    if (iframe) {
+                      iframe.src = '/pending.html?t=' + Date.now();
+                    }
                     if (typeof loadPendingOrders === 'function') loadPendingOrders();
                     
                     return; // Return immediately for limit orders
@@ -784,21 +839,32 @@
                 }
               };
               
-              // INLINE loadPendingOrders - reads from localStorage ONLY
-              window.loadPendingOrders = function() {
+              // INLINE loadPendingOrders - fetches from backend API
+              window.loadPendingOrders = async function() {
                 const container = document.getElementById('pendingLimitOrders');
                 if (!container) return;
                 
-                const pending = JSON.parse(localStorage.getItem('pendingLimitOrders') || '[]');
-                console.log('loadPendingOrders: localStorage has', pending.length, 'orders');
-                
-                if (pending.length === 0) {
-                  container.innerHTML = '<div style="color: #aaa; text-align: center; padding: 20px;">No pending limit orders</div>';
-                  return;
-                }
+                try {
+                  const res = await fetch('/api/pending-orders');
+                  const data = await res.json();
+                  
+                  if (!data.success) {
+                    container.innerHTML = '<div class="error">Error loading pending orders</div>';
+                    return;
+                  }
+                  
+                  const pending = data.data || [];
+                  console.log('loadPendingOrders: API returned', pending.length, 'orders');
+                  
+                  if (pending.length === 0) {
+                    container.innerHTML = '<div style="color: #aaa; text-align: center; padding: 20px;">No pending limit orders</div>';
+                    return;
+                  }
                 
                 let html = '';
                 pending.forEach((trade, idx) => {
+                  const pctGain = trade.targetProfitPct || (((trade.targetPrice - trade.limitPrice) / trade.limitPrice) * 100).toFixed(2);
+                  const dollarProfit = trade.targetProfitDollar || ((trade.targetPrice - trade.limitPrice) * trade.buyAmount).toFixed(2);
                   html += `
                     <div class="trade-card" style="background: rgba(255, 165, 0, 0.1); border-left: 3px solid #ffa500; padding: 15px; margin-bottom: 10px;">
                       <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -806,7 +872,7 @@
                           <strong style="color: #ffa500;">⏳ Pending Order #${idx + 1}</strong><br>
                           📊 ${trade.buyAmount} ETH @ $${trade.limitPrice.toFixed(2)}<br>
                           🎯 Take-profit: $${trade.targetPrice.toFixed(2)}<br>
-                          💰 Potential Profit: $${trade.targetProfit}<br>
+                          💰 Potential Profit: ${pctGain}% ($${dollarProfit})<br>
                           ⏳ Status: ${trade.status.toUpperCase()}
                         </div>
                         <button onclick="cancelPendingOrder(${idx})" style="background: rgba(255, 69, 58, 0.2); border: 1px solid #ff453a; color: #ff453a; padding: 8px 15px; border-radius: 8px; cursor: pointer;">
@@ -823,14 +889,18 @@
               // INLINE cancel function - calls API to cancel real order
               window.cancelPendingOrder = async function(idx) {
                 console.log('Cancel clicked, index:', idx);
-                const pending = JSON.parse(localStorage.getItem('pendingLimitOrders') || '[]');
-                console.log('Pending orders in localStorage:', pending.length);
                 
-                if (idx >= 0 && idx < pending.length) {
-                  const trade = pending[idx];
-                  console.log('Cancelling order:', trade);
+                try {
+                  // Fetch from backend first
+                  const res = await fetch('/api/pending-orders');
+                  const data = await res.json();
+                  const pending = data.data || [];
+                  console.log('Pending orders in backend:', pending.length);
                   
-                  try {
+                  if (idx >= 0 && idx < pending.length) {
+                    const trade = pending[idx];
+                    console.log('Cancelling order:', trade);
+                    
                     // Call API to cancel the actual order on Binance.US
                     const cancelRes = await fetch('/api/cancel-order', {
                       method: 'POST',
@@ -846,7 +916,16 @@
                     
                     if (cancelData.success) {
                       console.log('✅ Order cancelled on Binance.US!');
-                      pending.splice(idx, 1);
+                      
+                      // Remove from backend
+                      await fetch(`/api/pending-orders/${trade.orderId}`, {
+                        method: 'DELETE'
+                      });
+                      
+                      // Also remove from localStorage (backwards compatibility)
+                      const localPending = JSON.parse(localStorage.getItem('pendingLimitOrders') || '[]');
+                      const filtered = localPending.filter(p => p.orderId != trade.orderId);
+                      localStorage.setItem('pendingLimitOrders', JSON.stringify(filtered));
                       localStorage.setItem('pendingLimitOrders', JSON.stringify(pending));
                       console.log('✅ Removed from pending list! Remaining:', pending.length);
                       if (typeof loadPendingOrders === 'function') loadPendingOrders();
@@ -981,9 +1060,11 @@
       await loadPrice();
       await loadFees();
       await loadCurrentApiKey();
+      await loadCurrentProfit();
       // Refresh intervals
       setInterval(loadPrice, 10000);
       setInterval(loadPortfolio, 30000);
+      setInterval(loadCurrentProfit, 30000);
       setInterval(checkTradingStatus, 60000);
     }
 
@@ -1257,6 +1338,68 @@
       } catch (error) {
         console.error('Error loading portfolio:', error);
         document.getElementById('portfolio').innerHTML = '<div class="message error">Connection error</div>';
+      }
+    }
+
+    async function loadCurrentProfit() {
+      try {
+        // Add cache-busting timestamp to force fresh data
+        const res = await fetch(`${API_BASE}/backup-special-trades?t=${Date.now()}`);
+        const data = await res.json();
+        
+        if (data.success && data.data) {
+          const trades = data.data;
+          const active = trades.active || [];
+          const completed = trades.completed || [];
+          
+          // Calculate profit from completed trades (using target profit like simple-trades.js)
+          let completedProfit = 0;
+          completed.forEach(trade => {
+            // Use target profit calculation: (targetPrice - buyPrice) × buyAmount
+            if (trade.targetPrice && trade.buyPrice && trade.buyAmount) {
+              completedProfit += (trade.targetPrice - trade.buyPrice) * trade.buyAmount;
+            }
+          });
+          
+          // Calculate unrealized profit from active trades (current price vs buy price)
+          let unrealizedProfit = 0;
+          active.forEach(trade => {
+            if (currentPrice > 0 && trade.buyPrice) {
+              const currentGain = (currentPrice - trade.buyPrice) * trade.buyAmount;
+              unrealizedProfit += currentGain;
+            }
+          });
+          
+          const totalProfit = completedProfit + unrealizedProfit;
+          
+          document.getElementById('currentProfit').innerHTML = `
+            <div class="balance-item">
+              <span class="balance-label">Total Profit</span>
+              <span class="balance-value" style="color: ${totalProfit >= 0 ? '#00ff88' : '#ff453a'}">$${totalProfit.toFixed(2)}</span>
+            </div>
+            <div class="balance-item">
+              <span class="balance-label">Completed Profit</span>
+              <span class="balance-value" style="color: ${completedProfit >= 0 ? '#00ff88' : '#ff453a'}">$${completedProfit.toFixed(2)}</span>
+            </div>
+            <div class="balance-item">
+              <span class="balance-label">Unrealized (Active)</span>
+              <span class="balance-value" style="color: ${unrealizedProfit >= 0 ? '#00ff88' : '#ff453a'}">$${unrealizedProfit.toFixed(2)}</span>
+            </div>
+            <div class="balance-item" style="border-top: 1px solid rgba(255,255,255,0.2); padding-top: 10px; margin-top: 10px;">
+              <span class="balance-label">Active Trades</span>
+              <span class="balance-value">${active.length}</span>
+            </div>
+            <div class="balance-item">
+              <span class="balance-label">Completed Trades</span>
+              <span class="balance-value">${completed.length}</span>
+            </div>
+          `;
+        } else {
+          document.getElementById('currentProfit').innerHTML = '<div class="message">No trade data</div>';
+        }
+      } catch (error) {
+        console.error('Error loading profit:', error);
+        document.getElementById('currentProfit').innerHTML = '<div class="message error">Connection error</div>';
       }
     }
 
@@ -2323,6 +2466,22 @@
       trades.splice(index, 1);
       localStorage.setItem('specialTrades', JSON.stringify(trades));
       loadActiveSpecialTrades();
+    }
+    
+    // Clear all browser cache and reload
+    function clearCacheAndReload() {
+      if (confirm('This will clear all cached data and reload the page. Continue?')) {
+        // Clear localStorage
+        localStorage.clear();
+        
+        // Clear service worker cache if exists
+        if ('caches' in window) {
+          caches.keys().then(names => names.forEach(name => caches.delete(name)));
+        }
+        
+        // Force hard reload
+        window.location.reload(true);
+      }
     }
   </script>
   

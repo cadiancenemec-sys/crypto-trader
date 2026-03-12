@@ -795,6 +795,58 @@ router.post('/config', async (req, res) => {
 });
 
 // Backup Special Trades to file
+// POST /api/save-pending-order - Save pending limit order to file
+router.post('/save-pending-order', async (req, res) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const { orderId, ethAmount, limitPrice, targetPrice, targetProfitPct, targetProfitDollar } = req.body;
+    
+    // Validate required fields
+    if (!orderId || !ethAmount || !limitPrice) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Missing required fields: orderId, ethAmount, limitPrice' 
+      });
+    }
+    
+    // Load existing pending orders
+    const pendingFile = path.join(__dirname, '../pending-orders.json');
+    let pendingData = { pending: [] };
+    
+    if (fs.existsSync(pendingFile)) {
+      pendingData = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
+    }
+    
+    // Create new pending order
+    const newOrder = {
+      orderId: parseInt(orderId),
+      type: 'buy_limit',
+      asset: 'ETH',
+      limitPrice: parseFloat(limitPrice),
+      buyAmount: parseFloat(ethAmount),
+      targetPrice: parseFloat(targetPrice),
+      targetProfit: parseFloat(targetProfitDollar),
+      targetProfitPct: parseFloat(targetProfitPct),
+      status: 'NEW',
+      createTime: new Date().toISOString()
+    };
+    
+    // Add to pending list
+    pendingData.pending.push(newOrder);
+    
+    // Save to file
+    fs.writeFileSync(pendingFile, JSON.stringify(pendingData, null, 2));
+    
+    console.log('✅ Pending order saved to file:', newOrder.orderId);
+    res.json({ success: true, orderId: newOrder.orderId });
+    
+  } catch (err) {
+    console.error('❌ Error saving pending order:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.post('/backup-special-trades', async (req, res) => {
   const fs = require('fs').promises;
   const path = require('path');
@@ -820,19 +872,165 @@ router.get('/backup-special-trades', async (req, res) => {
     const backupPath = path.join(__dirname, '../special-trades-backup.json');
     const data = await fs.readFile(backupPath, 'utf8');
     const trades = JSON.parse(data);
-    console.log('📦 Restored special trades from backup:', trades.length, 'trades');
+    
+    // Handle both old format (array) and new format (object with active/completed)
+    let activeTrades = [];
+    let completedTrades = [];
+    
+    if (Array.isArray(trades)) {
+      // Old format - filter by status
+      activeTrades = trades.filter(t => t.status === 'active');
+      completedTrades = trades.filter(t => t.status === 'completed');
+    } else {
+      // New format - has active and completed arrays
+      activeTrades = trades.active || [];
+      completedTrades = trades.completed || [];
+    }
+    
+    console.log('📦 Restored special trades:', activeTrades.length, 'active,', completedTrades.length, 'completed');
+    console.log('📦 Active order IDs:', activeTrades.map(t=>t.sellOrderId));
+    
     res.json({ 
       success: true, 
-      data: trades,
-      debug: {
-        count: trades.length,
-        valid: trades.filter(t => t.buyPrice && t.targetPrice).length
+      data: {
+        active: activeTrades,
+        completed: completedTrades
       }
     });
   } catch (error) {
     // No backup exists yet - that's OK
-    res.json({ success: false, data: [] });
+    res.json({ success: false, data: { active: [], completed: [] } });
   }
 });
 
 module.exports = router;
+
+// ============================================
+// PENDING ORDERS API - Backend Storage
+// ============================================
+
+// GET /api/pending-orders - Fetch all pending orders
+router.get('/pending-orders', async (req, res) => {
+  const fs = require('fs').promises;
+  const path = require('path');
+  
+  try {
+    const pendingPath = path.join(__dirname, '../pending-orders.json');
+    let data = { pending: [] };
+    
+    try {
+      const fileData = await fs.readFile(pendingPath, 'utf8');
+      data = JSON.parse(fileData);
+    } catch (e) {
+      // File doesn't exist yet, that's OK
+    }
+    
+    res.json({ success: true, data: data.pending || [] });
+  } catch (error) {
+    console.error('Error fetching pending orders:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/pending-orders - Add a pending order
+router.post('/pending-orders', async (req, res) => {
+  const fs = require('fs').promises;
+  const path = require('path');
+  const { order } = req.body;
+  
+  if (!order) {
+    return res.status(400).json({ success: false, error: 'Order data required' });
+  }
+  
+  try {
+    const pendingPath = path.join(__dirname, '../pending-orders.json');
+    let data = { pending: [] };
+    
+    try {
+      const fileData = await fs.readFile(pendingPath, 'utf8');
+      data = JSON.parse(fileData);
+    } catch (e) {
+      // File doesn't exist yet
+    }
+    
+    if (!data.pending) data.pending = [];
+    data.pending.unshift(order);
+    
+    await fs.writeFile(pendingPath, JSON.stringify(data, null, 2), 'utf8');
+    console.log('✅ Pending order saved:', order.orderId, '@ $' + order.limitPrice);
+    
+    res.json({ success: true, message: 'Pending order saved', data: order });
+  } catch (error) {
+    console.error('Error saving pending order:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// DELETE /api/pending-orders/:orderId - Remove a pending order
+router.delete('/pending-orders/:orderId', async (req, res) => {
+  const fs = require('fs').promises;
+  const path = require('path');
+  const { orderId } = req.params;
+  
+  try {
+    const pendingPath = path.join(__dirname, '../pending-orders.json');
+    let data = { pending: [] };
+    
+    try {
+      const fileData = await fs.readFile(pendingPath, 'utf8');
+      data = JSON.parse(fileData);
+    } catch (e) {
+      return res.json({ success: true, message: 'No pending orders' });
+    }
+    
+    const initialLength = data.pending.length;
+    data.pending = data.pending.filter(o => o.orderId != orderId);
+    
+    if (data.pending.length < initialLength) {
+      await fs.writeFile(pendingPath, JSON.stringify(data, null, 2), 'utf8');
+      console.log('✅ Pending order removed:', orderId);
+    }
+    
+    res.json({ success: true, removed: initialLength - data.pending.length });
+  } catch (error) {
+    console.error('Error removing pending order:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// PUT /api/pending-orders/:orderId - Update a pending order (e.g., convert to active)
+router.put('/pending-orders/:orderId', async (req, res) => {
+  const fs = require('fs').promises;
+  const path = require('path');
+  const { orderId } = req.params;
+  const { updates } = req.body;
+  
+  try {
+    const pendingPath = path.join(__dirname, '../pending-orders.json');
+    let data = { pending: [] };
+    
+    try {
+      const fileData = await fs.readFile(pendingPath, 'utf8');
+      data = JSON.parse(fileData);
+    } catch (e) {
+      return res.status(404).json({ success: false, error: 'No pending orders' });
+    }
+    
+    const order = data.pending.find(o => o.orderId == orderId);
+    if (!order) {
+      return res.status(404).json({ success: false, error: 'Order not found' });
+    }
+    
+    // Update the order
+    Object.assign(order, updates);
+    
+    await fs.writeFile(pendingPath, JSON.stringify(data, null, 2), 'utf8');
+    console.log('✅ Pending order updated:', orderId);
+    
+    res.json({ success: true, data: order });
+  } catch (error) {
+    console.error('Error updating pending order:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
