@@ -1634,7 +1634,7 @@
         };
         
         // Save to localStorage for demo purposes
-        let orders = JSON.parse(localStorage.getItem('specialTrades') || '[]');
+        let orders = JSON.parse(sessionStorage.getItem('specialTrades') || '[]');
         orders.push(takeProfitOrder);
         localStorage.setItem('specialTrades', JSON.stringify(orders));
         
@@ -2174,7 +2174,7 @@
     }
 
     function saveSpecialTrade(trade) {
-      let trades = JSON.parse(localStorage.getItem('specialTrades') || '[]');
+      let trades = JSON.parse(sessionStorage.getItem('specialTrades') || '[]');
       trades.unshift(trade);
       localStorage.setItem('specialTrades', JSON.stringify(trades));
       console.log('✅ Saved special trade to localStorage:', trade);
@@ -2205,12 +2205,12 @@
       let trades = [];
       try {
         if (debugText) debugText.innerHTML += '<br>Fetching backup...';
-        const backupRes = await fetch(`${API_BASE}/backup-special-trades`);
+        const backupRes = await fetch(`${API_BASE}/backup-special-trades?t=${Date.now()}`);
         const backupData = await backupRes.json();
         if (debugText) debugText.innerHTML += `<br>Backup: ${backupData.success ? 'SUCCESS' : 'FAILED'}, Count: ${backupData.data?.length || 0}`;
         
-        if (backupData.success && backupData.data && backupData.data.length > 0) {
-          trades = backupData.data;
+        if (backupData.success && backupData.data && backupData.data.active && backupData.data.active.length > 0) {
+          trades = backupData.data.active || [];
           localStorage.setItem('specialTrades', JSON.stringify(trades));
           if (debugText) debugText.innerHTML += `<br>✅ Loaded ${trades.length} from backup`;
         }
@@ -2219,7 +2219,7 @@
       }
       
       if (trades.length === 0) {
-        trades = JSON.parse(localStorage.getItem('specialTrades') || '[]');
+        trades = JSON.parse(sessionStorage.getItem('specialTrades') || '[]');
         if (debugText) debugText.innerHTML += `<br>📋 Loaded ${trades.length} from localStorage`;
       }
       
@@ -2231,31 +2231,17 @@
         return;
       }
       
-      try {
-        if (debugText) debugText.innerHTML += '<br>Starting render...';
-        container.innerHTML = trades.map((trade, index) => {
-          if (debugText) debugText.innerHTML += `<br>Processing trade ${index}...`;
-          if (!trade.buyPrice || !trade.targetPrice) {
-            if (debugText) debugText.innerHTML += `<br>Skipping trade ${index}: invalid`;
-            return '';
-          }
-      
-      if (!container) {
-        console.log(`ERROR: activeSpecialTrades container not in DOM!<br>`);
-        return;
-      }
-      
       container.innerHTML = '<div class="loading">Loading trades...</div>';
       
       // Try to load from backup first, then localStorage
       let trades = [];
       try {
-        const backupRes = await fetch(`${API_BASE}/backup-special-trades`);
+        const backupRes = await fetch(`${API_BASE}/backup-special-trades?t=${Date.now()}`);
         const backupData = await backupRes.json();
         console.log(`Backup API: ${backupData.success ? 'SUCCESS' : 'FAILED'}, Count: ${backupData.data?.length || 0}<br>`);
         
-        if (backupData.success && backupData.data && backupData.data.length > 0) {
-          trades = backupData.data;
+        if (backupData.success && backupData.data && backupData.data.active && backupData.data.active.length > 0) {
+          trades = backupData.data.active || [];
           localStorage.setItem('specialTrades', JSON.stringify(trades));
           console.log(`✅ Loaded ${trades.length} trades from backup<br>`);
         }
@@ -2265,7 +2251,7 @@
       
       // Fallback to localStorage if backup empty
       if (trades.length === 0) {
-        trades = JSON.parse(localStorage.getItem('specialTrades') || '[]');
+        trades = JSON.parse(sessionStorage.getItem('specialTrades') || '[]');
         console.log(`📋 Loaded ${trades.length} trades from localStorage<br>`);
       }
       
@@ -2462,7 +2448,7 @@
     }
 
     function cancelSpecialTrade(index) {
-      let trades = JSON.parse(localStorage.getItem('specialTrades') || '[]');
+      let trades = JSON.parse(sessionStorage.getItem('specialTrades') || '[]');
       trades.splice(index, 1);
       localStorage.setItem('specialTrades', JSON.stringify(trades));
       loadActiveSpecialTrades();
