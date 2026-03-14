@@ -61,7 +61,7 @@ router.get('/strategies', (req, res) => {
     // Available cash = total budget minus pending buys minus (filled buys minus filled sells)
     // filledBuys - filledSells = net money still committed
     const netCommitted = filledBuyCost - filledSellValue;
-    const availableCash = s.totalBudget - openBuyCost - netCommitted;
+    const availableCash = Math.max(0, s.totalBudget - openBuyCost - netCommitted);
     const totalAssets = availableCash + cryptoValue;
     
     // Count open buy orders from gridSteps (works for both mock and real)
@@ -131,7 +131,45 @@ router.post('/strategies', (req, res) => {
 
 // Update strategy
 router.put('/strategies/:id', async (req, res) => {
-  const strategy = tradingDb.updateStrategy(parseInt(req.params.id), req.body);
+  const strategyId = parseInt(req.params.id);
+  const currentStrategy = tradingDb.getStrategy(strategyId);
+  if (!currentStrategy) {
+    return res.status(404).json({ error: 'Strategy not found' });
+  }
+  
+  // Check if autoEnd is being enabled (was false, now true)
+  const wasAutoEndEnabled = currentStrategy.autoEnd;
+  const isAutoEndEnabled = req.body.autoEnd;
+  
+  // If autoEnd is being enabled, cancel all open buy orders and reset gridSteps
+  if (!wasAutoEndEnabled && isAutoEndEnabled) {
+    console.log(`[DCA Bot] Auto-end enabled for strategy ${strategyId}, canceling buy orders...`);
+    
+    // Cancel all open buy orders in the grid
+    if (currentStrategy.gridSteps) {
+      for (const step of currentStrategy.gridSteps) {
+        if (step.status === 'open_buy' && step.orderId) {
+          // Cancel the order in mock exchange
+          if (trading.USE_MOCK && mockExchange) {
+            mockExchange.cancelOrder(currentStrategy.symbol, step.orderId);
+          }
+          // Reset grid step to available
+          tradingDb.updateGridStep(strategyId, step.level, {
+            status: 'available',
+            orderId: null,
+            buyOrderId: null,
+            filledAt: null
+          });
+        }
+      }
+    }
+    
+    // Reload strategy after updates
+    const updatedStrategy = tradingDb.getStrategy(strategyId);
+    console.log(`[DCA Bot] Buy orders cancelled for strategy ${strategyId}, waiting for sells to complete`);
+  }
+  
+  const strategy = tradingDb.updateStrategy(strategyId, req.body);
   if (!strategy) {
     return res.status(404).json({ error: 'Strategy not found' });
   }
@@ -277,30 +315,50 @@ router.post('/mock/simulate', (req, res) => {
   res.json(result);
 });
 
+// Set mock price directly
+router.post('/mock/setprice', (req, res) => {
+  const { symbol, price } = req.body;
+  mockExchange.setPrice(symbol.toUpperCase(), parseFloat(price));
+  res.json({ symbol, price });
+});
+
 // Get orders (real or mock based on mode)
 router.get('/orders', (req, res) => {
-  // In prod, get orders from strategy gridSteps
-  if (!trading.USE_MOCK) {
-    const strategies = tradingDb.getAllStrategies();
-    const orders = [];
-    for (const strategy of strategies) {
-      for (const step of strategy.gridSteps || []) {
-        if (step.status === 'open_buy' && step.orderId) {
-          orders.push({
-            orderId: step.orderId,
-            symbol: strategy.symbol,
-            side: 'BUY',
-            price: step.price,
-            quantity: strategy.tradeAmount,
-            status: 'NEW'
-          });
-        }
+  const strategies = tradingDb.getAllStrategies();
+  const orders = [];
+  
+  for (const strategy of strategies) {
+    for (const step of strategy.gridSteps || []) {
+      // Include open buy orders
+      if (step.status === 'open_buy' && step.orderId) {
+        orders.push({
+          orderId: step.orderId,
+          strategyId: strategy.id,
+          symbol: strategy.symbol,
+          side: 'BUY',
+          price: step.price,
+          quantity: strategy.tradeAmount,
+          status: 'NEW',
+          level: step.level
+        });
+      }
+      // Include pending sell orders (not yet filled)
+      if (step.status === 'pending_sell') {
+        const sellPrice = step.price * (1 + strategy.profitTarget / 100);
+        const orderId = step.sellOrderId || step.orderId || 'pending';
+        orders.push({
+          orderId: orderId,
+          strategyId: strategy.id,
+          symbol: strategy.symbol,
+          side: 'SELL',
+          price: sellPrice,
+          quantity: strategy.tradeAmount,
+          status: 'NEW',
+          level: step.level
+        });
       }
     }
-    return res.json(orders);
   }
-  // In dev, use mock
-  const orders = mockExchange.getOpenOrders();
   res.json(orders);
 });
 

@@ -330,7 +330,7 @@
       <div class="mock-panel">
         <div id="mockPrices"></div>
         <div class="sim-controls">
-          <button class="sim-btn" onclick="runSim('ETHUSDT', 'spike', 500, 5)">ETH +$500</button>
+          <button class="sim-btn" onclick="gradualSpike('ETHUSDT', 50)">ETH +$50</button>
           <button class="sim-btn" onclick="runSim('ETHUSDT', 'drop', 500, 5)">ETH -$500</button>
           <button class="sim-btn" onclick="runSim('BTCUSDT', 'spike', 2000, 5)">BTC +$2k</button>
           <button class="sim-btn" onclick="runSim('BTCUSDT', 'drop', 2000, 5)">BTC -$2k</button>
@@ -400,9 +400,9 @@
           <input type="number" id="newStartPrice" placeholder="Current price">
         </div>
       </div>
-      <div class="form-group">
-        <label>
-          <input type="checkbox" id="newAutoEnd"> Auto-end when all trades completed
+      <div class="form-group" id="autoEndGroup" style="display:flex !important;visibility:visible !important;">
+        <label style="display:flex !important;visibility:visible !important;">
+          <input type="checkbox" id="newAutoEnd" style="display:inline-block !important;visibility:visible !important;"> Auto-end when all trades completed
         </label>
       </div>
       <div class="form-group">
@@ -568,7 +568,7 @@
         list.innerHTML = activeStrategies.map(s => `
           <div class="strategy-item ${s.status}" onclick="selectStrategy(${s.id})">
             <div class="strategy-header">
-              <span class="strategy-symbol">${s.symbol}</span>
+              <span class="strategy-symbol">#${s.id} ${s.symbol}</span>
               <span class="strategy-status status-${s.status}">${s.status}</span>
               <button class="edit-btn" onclick="event.stopPropagation(); editStrategy(${s.id})">✏️ Edit</button>
             </div>
@@ -590,7 +590,7 @@
       } else {
         completedList.innerHTML = completedStrategies.map(s => `
           <div class="completed-item" onclick="selectStrategy(${s.id})">
-            <div class="strategy-symbol">${s.symbol}</div>
+            <div class="strategy-symbol">#${s.id} ${s.symbol}</div>
             <div class="strategy-stats">
               <span>${s.stats?.totalTrades || 0} trades</span>
               <span>$${s.stats?.totalProfit?.toFixed(2) || '0.00'} profit</span>
@@ -618,7 +618,13 @@
       document.getElementById('newGridLevels').value = strategy.gridLevels;
       document.getElementById('newGridSpacing').value = strategy.gridSpacing;
       document.getElementById('newStartPrice').value = strategy.startPrice || '';
-      document.getElementById('newAutoEnd').checked = strategy.autoEnd;
+      const autoEndCheckbox = document.getElementById('newAutoEnd');
+      console.log('Setting autoEnd checked:', strategy.autoEnd, 'element:', autoEndCheckbox);
+      if (strategy.autoEnd) {
+        autoEndCheckbox.setAttribute('checked', 'checked');
+      } else {
+        autoEndCheckbox.removeAttribute('checked');
+      }
       document.getElementById('newEmergencyDrop').checked = strategy.emergencyDropEnabled;
       
       // Populate emergency drop fields
@@ -674,10 +680,11 @@
       }
       list.innerHTML = orders.map(o => {
         const estimatedFee = o.price * o.quantity * 0.001;
+        const strategyTag = o.strategyId ? `<span style="background:#1a472a;color:#00ff88;padding:2px 6px;border-radius:4px;font-size:0.75em;margin-right:8px">#${o.strategyId}</span>` : '';
         return `
         <div class="order-item order-${o.side.toLowerCase()}">
           <div>
-            <span class="order-side">${o.side}</span>
+            ${strategyTag}<span class="order-side">${o.side}</span>
             ${o.quantity} ${o.symbol.replace('USDT', '')} @ $${o.price.toFixed(2)}
             ${o.fee ? `<span style="color:#888;font-size:0.8em;margin-left:8px">Fee: $${o.fee.toFixed(4)}</span>` : `<span style="color:#666;font-size:0.8em;margin-left:8px">Est: $${estimatedFee.toFixed(4)}</span>`}
           </div>
@@ -781,6 +788,24 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ symbol, mode, amount, duration })
       });
+    }
+    
+    // Gradually increase price by $1/second until target
+    async function gradualSpike(symbol, targetIncrease) {
+      const startPrice = mockExchange.getPrice ? await fetch('/api/dca/prices').then(r => r.json()).then(d => d.prices[symbol]) : 2500;
+      const currentPrice = startPrice;
+      const targetPrice = currentPrice + targetIncrease;
+      const steps = targetIncrease; // $1 per step
+      
+      for (let i = 1; i <= steps; i++) {
+        const newPrice = currentPrice + i;
+        await fetch('/api/dca/mock/setprice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol, price: newPrice })
+        });
+        await new Promise(r => setTimeout(r, 1000)); // Wait 1 second
+      }
     }
     
     function showAddModal() {

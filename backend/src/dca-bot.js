@@ -48,6 +48,19 @@ async function tick() {
   
   for (const strategy of strategies) {
     try {
+      // Check if autoEnd is enabled and no trades are pending
+      if (strategy.autoEnd) {
+        const gridSteps = strategy.gridSteps || [];
+        const openBuys = gridSteps.filter(s => s.status === 'open_buy');
+        const pendingSells = gridSteps.filter(s => s.status === 'pending_sell');
+        
+        if (openBuys.length === 0 && pendingSells.length === 0) {
+          tradingDb.updateStrategy(strategy.id, { status: 'completed' });
+          console.log(`[DCA Bot] Strategy ${strategy.id} marked as completed (auto-end, no pending trades)`);
+          continue; // Skip processing this strategy
+        }
+      }
+      
       await processStrategy(strategy);
     } catch (e) {
       console.error(`[DCA Bot] Error processing strategy ${strategy.id}:`, e.message);
@@ -170,13 +183,24 @@ async function processFills(strategy, buyOrders, sellOrders) {
       
       tradingDb.updateStrategy(strategy.id, { usableBudget: cappedBudget });
       
-      // Find and update the grid step to completed
+      // Find and update the grid step to completed, then reset to available for reuse
       const gridStep = freshStrategy.gridSteps?.find(s => s.sellOrderId === order.orderId);
       if (gridStep) {
         tradingDb.updateGridStep(strategy.id, gridStep.level, {
           status: 'completed',
           completedAt: new Date().toISOString()
         });
+        // Reset to available so the level can be reused for a new buy order
+        setTimeout(() => {
+          tradingDb.updateGridStep(strategy.id, gridStep.level, {
+            status: 'available',
+            orderId: null,
+            buyOrderId: null,
+            sellOrderId: null,
+            filledAt: null,
+            completedAt: null
+          });
+        }, 100);
       }
       
       // Record completed trade
@@ -204,10 +228,11 @@ async function processFills(strategy, buyOrders, sellOrders) {
         await placeBuyOrders(freshForBuyOrders, price, []);
       } else {
         // Auto-end enabled: mark strategy as completed when all trades are done
-        // Check if there are any open buys or pending sells
-        const allOrders = trading.getAllOrders(freshStrategy.symbol);
-        const openBuys = allOrders.filter(o => o.side === 'BUY' && o.status === 'NEW');
-        const pendingSells = allOrders.filter(o => o.side === 'SELL' && o.status === 'NEW');
+        // Check gridSteps for any open buys or pending sells
+        const updatedStrategy = tradingDb.getStrategy(strategy.id);
+        const gridSteps = updatedStrategy.gridSteps || [];
+        const openBuys = gridSteps.filter(s => s.status === 'open_buy');
+        const pendingSells = gridSteps.filter(s => s.status === 'pending_sell');
         
         if (openBuys.length === 0 && pendingSells.length === 0) {
           // No open trades, mark as completed
