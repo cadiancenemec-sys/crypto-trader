@@ -1,0 +1,123 @@
+[
+  {
+    "id": 21,
+    "symbol": "ETHUSDT",
+    "tradeAmount": 0.01,
+    "totalBudget": 100,
+    "usableBudget": 100,
+    "profitTarget": 1,
+    "gridLevels": 10,
+    "gridSpacing": 5,
+    "startPrice": 2500,
+    "status": "completed",
+    "autoEnd": true,
+    "emergencyDropEnabled": false,
+    "emergencyDropPercent": 5,
+    "emergencyDropMaxOrders": 3,
+    "emergencyDropActive": false,
+    "createdAt": "2026-03-14T15:14:55.901Z",
+    "updatedAt": "2026-03-14T15:30:37.239Z",
+    "gridSteps": [
+      {
+        "level": 0,
+        "price": 2500,
+        "status": "completed",
+        "orderId": "mock_1005",
+        "buyOrderId": "mock_1005",
+        "sellOrderId": "mock_1006",
+        "filledAt": "2026-03-14T15:17:23.057Z",
+        "completedAt": "2026-03-14T15:30:37.236Z"
+      },
+      {
+        "level": 1,
+        "price": 2495,
+        "status": "completed",
+        "orderId": "mock_1001",
+        "buyOrderId": "mock_1001",
+        "sellOrderId": "mock_1009",
+        "filledAt": "2026-03-14T15:30:32.236Z",
+        "completedAt": "2026-03-14T15:30:37.238Z"
+      },
+      {
+        "level": 2,
+        "price": 2490,
+        "status": "completed",
+        "orderId": "mock_1007",
+        "buyOrderId": "mock_1007",
+        "sellOrderId": "mock_1010",
+        "filledAt": "2026-03-14T15:30:32.238Z",
+        "completedAt": "2026-03-14T15:30:37.238Z"
+      },
+      {
+        "level": 3,
+        "price": 2485,
+        "status": "completed",
+        "orderId": "mock_1008",
+        "buyOrderId": "mock_1008",
+        "sellOrderId": "mock_1011",
+        "filledAt": "2026-03-14T15:30:32.239Z",
+        "completedAt": "2026-03-14T15:30:37.239Z"
+      },
+      {
+        "level": 4,
+        "price": 2480,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 5,
+        "price": 2475,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 6,
+        "price": 2470,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 7,
+        "price": 2465,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 8,
+        "price": 2460,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 9,
+        "price": 2455,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      }
+    ]
+  }
+]

@@ -1,0 +1,32 @@
+{
+  "name": "crypto-bot",
+  "version": "1.0.0",
+  "description": "Automated cryptocurrency trading bot",
+  "main": "backend/src/index.js",
+  "scripts": {
+    "start": "node backend/src/index.js",
+    "dev": "node --watch backend/src/index.js",
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.0",
+    "express": "^4.18.0",
+    "socket.io": "^4.8.3",
+    "sql.js": "^1.10.0",
+    "ws": "^8.16.0"
+  },
+  "keywords": [
+    "crypto",
+    "trading",
+    "bot"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "jest": "^30.3.0",
+    "supertest": "^7.2.2"
+  }
+}

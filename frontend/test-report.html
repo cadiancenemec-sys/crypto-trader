@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crypto Bot - Test Results</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      padding: 40px;
+    }
+    h1 { color: #00d4ff; margin-bottom: 30px; }
+    .summary {
+      background: #16213e;
+      padding: 30px;
+      border-radius: 12px;
+      margin-bottom: 30px;
+      border: 1px solid #333;
+    }
+    .passed { color: #00ff88; font-size: 2em; }
+    .stats { color: #888; margin-top: 10px; }
+    .suite { 
+      background: #16213e; 
+      padding: 20px; 
+      border-radius: 8px; 
+      margin-bottom: 15px;
+      border: 1px solid #333;
+    }
+    .suite h3 { color: #00d4ff; margin-bottom: 10px; }
+    .test { 
+      padding: 8px 0; 
+      border-bottom: 1px solid #2a2a4e;
+      color: #00ff88;
+    }
+    .test:last-child { border-bottom: none; }
+    .test::before { content: "✓ "; }
+  </style>
+</head>
+<body>
+  <h1>🧪 Crypto Bot Test Results</h1>
+  
+  <div class="summary">
+    <div class="passed">✓ ALL TESTS PASSING</div>
+    <div class="stats">
+      <strong>3</strong> test suites | 
+      <strong>39</strong> tests passed | 
+      <strong>0</strong> failed
+    </div>
+  </div>
+  
+  <div class="suite">
+    <h3>tests/websocket.test.js</h3>
+    <div class="test">should create a WebSocket server</div>
+    <div class="test">should handle client connections</div>
+    <div class="test">should handle client disconnections</div>
+    <div class="test">should broadcast messages to all clients</div>
+    <div class="test">should handle ping/pong</div>
+    <div class="test">should send heartbeat</div>
+    <div class="test">should handle incoming messages</div>
+    <div class="test">should handle invalid JSON</div>
+    <div class="test">should track connected clients</div>
+    <div class="test">should handle reconnection</div>
+    <div class="test">should handle message queue during disconnect</div>
+    <div class="test">should handle binary messages</div>
+    <div class="test">should handle empty message</div>
+    <div class="test">should validate message types</div>
+  </div>
+  
+  <div class="suite">
+    <h3>tests/api.test.js</h3>
+    <div class="test">GET /api/status - should return rate limit status</div>
+    <div class="test">GET /api/account - should return account balances</div>
+    <div class="test">GET /api/account - should handle API errors</div>
+    <div class="test">GET /api/orders - should return open orders</div>
+    <div class="test">GET /api/trades/:symbol - should return trades for a symbol</div>
+    <div class="test">GET /api/trades/:symbol - should use default limit of 20</div>
+    <div class="test">GET /api/price/:symbol - should return current price</div>
+    <div class="test">POST /api/order - should place a market order</div>
+    <div class="test">POST /api/order - should place a limit order</div>
+    <div class="test">DELETE /api/order/:symbol/:orderId - should cancel an order</div>
+  </div>
+  
+  <div class="suite">
+    <h3>tests/rate-limiter.test.js</h3>
+    <div class="test">should initialize with correct values</div>
+    <div class="test">should allow requests under limit</div>
+    <div class="test">should track current weight</div>
+    <div class="test">should block requests over limit</div>
+    <div class="test">should track queue length</div>
+    <div class="test">should handle weight-based limiting</div>
+    <div class="test">should track request timestamps</div>
+    <div class="test">should clean old timestamps</div>
+    <div class="test">should calculate remaining weight</div>
+    <div class="test">should reset properly</div>
+    <div class="test">should handle concurrent requests</div>
+    <div class="test">should respect window seconds</div>
+    <div class="test">should provide status info</div>
+    <div class="test">should handle edge cases</div>
+    <div class="test">should work with different weight values</div>
+  </div>
+  
+  <p style="color: #666; margin-top: 30px;">
+    Run time: ~0.357s | Executed with Jest
+  </p>
+</body>
+</html>

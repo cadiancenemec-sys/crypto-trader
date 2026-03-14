@@ -1,0 +1,72 @@
+[
+  {
+    "id": 1,
+    "strategyId": 21,
+    "symbol": "ETHUSDT",
+    "buyPrice": 2500.990099009901,
+    "sellPrice": 2526,
+    "quantity": 0.01,
+    "profit": 0.19982910891089242,
+    "profitPercent": 1,
+    "completedAt": "2026-03-14T15:16:18.055Z"
+  },
+  {
+    "id": 2,
+    "strategyId": 21,
+    "symbol": "ETHUSDT",
+    "buyPrice": 2501.980198019802,
+    "sellPrice": 2527,
+    "quantity": 0.01,
+    "profit": 0.19990821782178023,
+    "profitPercent": 1,
+    "completedAt": "2026-03-14T15:17:08.077Z"
+  },
+  {
+    "id": 3,
+    "strategyId": 21,
+    "symbol": "ETHUSDT",
+    "buyPrice": 1999,
+    "sellPrice": 2999,
+    "quantity": 0.01,
+    "profit": 9.95002,
+    "profitPercent": 1,
+    "fees": 0.049980000000000004,
+    "completedAt": "2026-03-14T15:30:37.237Z"
+  },
+  {
+    "id": 4,
+    "strategyId": 21,
+    "symbol": "ETHUSDT",
+    "buyPrice": 1999,
+    "sellPrice": 2999,
+    "quantity": 0.01,
+    "profit": 9.95002,
+    "profitPercent": 1,
+    "fees": 0.049980000000000004,
+    "completedAt": "2026-03-14T15:30:37.238Z"
+  },
+  {
+    "id": 5,
+    "strategyId": 21,
+    "symbol": "ETHUSDT",
+    "buyPrice": 1999,
+    "sellPrice": 2999,
+    "quantity": 0.01,
+    "profit": 9.95002,
+    "profitPercent": 1,
+    "fees": 0.049980000000000004,
+    "completedAt": "2026-03-14T15:30:37.239Z"
+  },
+  {
+    "id": 6,
+    "strategyId": 21,
+    "symbol": "ETHUSDT",
+    "buyPrice": 1999,
+    "sellPrice": 2999,
+    "quantity": 0.01,
+    "profit": 9.95002,
+    "profitPercent": 1,
+    "fees": 0.049980000000000004,
+    "completedAt": "2026-03-14T15:30:37.239Z"
+  }
+]

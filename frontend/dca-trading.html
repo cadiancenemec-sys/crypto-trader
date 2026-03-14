@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DCA Grid Trading Bot</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      min-height: 100vh;
+    }
+    
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, #16213e 0%, #1a1a2e 100%);
+      border-bottom: 1px solid #333;
+      padding: 20px 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header h1 { color: #00d4ff; font-size: 1.5em; }
+    
+    /* Price Ticker Header */
+    .price-header {
+      background: linear-gradient(135deg, #16213e 0%, #1a1a2e 100%);
+      border-bottom: 1px solid #333;
+      padding: 12px 30px;
+      display: flex;
+      justify-content: center;
+    }
+    .price-ticker {
+      display: flex;
+      gap: 50px;
+    }
+    .ticker-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .ticker-symbol {
+      color: #888;
+      font-weight: bold;
+      font-size: 0.9em;
+    }
+    .ticker-price {
+      color: #00ff88;
+      font-family: monospace;
+      font-size: 1.1em;
+    }
+    .ticker-price.flash-green {
+      animation: flashGreen 0.5s ease;
+    }
+    .ticker-price.flash-red {
+      animation: flashRed 0.5s ease;
+    }
+    @keyframes flashGreen {
+      0% { background: #00ff88; color: #1a1a2e; }
+      100% { background: transparent; }
+    }
+    @keyframes flashRed {
+      0% { background: #ff4757; color: #fff; }
+      100% { background: transparent; }
+    }
+    .header .stats { display: flex; gap: 30px; }
+    .stat { text-align: center; }
+    .stat-value { font-size: 1.5em; color: #00ff88; }
+    .stat-label { font-size: 0.8em; color: #888; }
+    
+    /* Main layout */
+    .container { display: flex; height: calc(100vh - 130px); }
+    
+    /* Sidebar */
+    .sidebar {
+      width: 300px;
+      background: #16213e;
+      border-right: 1px solid #333;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    .sidebar h2 { color: #00d4ff; font-size: 1.1em; margin-bottom: 15px; }
+    
+    #strategyList {
+      max-height: calc(100vh - 280px);
+      overflow-y: auto;
+      padding-right: 5px;
+    }
+    
+    /* Main content */
+    .main { flex: 1; padding: 20px; overflow-y: auto; }
+    
+    /* Cards */
+    .card {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      border: 1px solid #333;
+    }
+    .card h3 { color: #00d4ff; margin-bottom: 15px; }
+    
+    /* Buttons */
+    .btn {
+      background: #00d4ff;
+      color: #1a1a2e;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .btn:hover { background: #00b8e6; }
+    .btn-success { background: #00ff88; }
+    .btn-danger { background: #ff4757; }
+    .btn-secondary { background: #555; color: #fff; }
+    
+    /* Form inputs */
+    input, select {
+      background: #2a2a4e;
+      border: 1px solid #444;
+      color: #eee;
+      padding: 10px;
+      border-radius: 6px;
+      width: 100%;
+      margin-bottom: 10px;
+    }
+    label { display: block; color: #888; font-size: 0.85em; margin-bottom: 5px; }
+    .form-row { display: flex; gap: 15px; }
+    .form-group { flex: 1; }
+    
+    /* Strategy list */
+    .strategy-item {
+      background: #2a2a4e;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      border: 2px solid transparent;
+    }
+    .strategy-item:hover { border-color: #00d4ff; }
+    .strategy-item.active { border-color: #00ff88; }
+    .strategy-item.paused { opacity: 0.6; }
+    .strategy-header { display: flex; justify-content: space-between; align-items: center; }
+    .strategy-symbol { font-weight: bold; color: #00d4ff; }
+    .strategy-status { font-size: 0.8em; padding: 3px 8px; border-radius: 4px; }
+    .status-active { background: #00ff88; color: #1a1a2e; }
+    .status-paused { background: #ffa502; color: #1a1a2e; }
+    .strategy-stats { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 0.85em; color: #888; }
+    
+    /* Mock exchange controls */
+    .mock-panel {
+      background: #2a2a4e;
+      padding: 15px;
+      border-radius: 8px;
+    }
+    .price-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #333;
+    }
+    .price-row:last-child { border-bottom: none; }
+    .price-value { font-family: monospace; font-size: 1.2em; color: #00ff88; }
+    .price-input { width: 100px; margin: 0; }
+    .freeze-btn { background: none; border: 1px solid #555; color: #888; padding: 5px 10px; cursor: pointer; }
+    .freeze-btn.frozen { border-color: #00d4ff; color: #00d4ff; }
+    .edit-btn { background: #444; border: none; color: #fff; padding: 4px 8px; cursor: pointer; border-radius: 4px; font-size: 0.8em; margin-left: auto; }
+    .edit-btn:hover { background: #555; }
+    
+    /* Orders */
+    .order-list { max-height: 300px; overflow-y: auto; }
+    .order-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px;
+      background: #2a2a4e;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+    .order-buy { border-left: 3px solid #00ff88; }
+    .order-sell { border-left: 3px solid #ff4757; }
+    .order-side { font-weight: bold; }
+    .order-buy .order-side { color: #00ff88; }
+    .order-sell .order-side { color: #ff4757; }
+    
+    /* Trades */
+    .trade-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px;
+      background: #2a2a4e;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+    .trade-profit { color: #00ff88; }
+    .trade-loss { color: #ff4757; }
+    
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.8);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 30px;
+      width: 500px;
+      max-width: 90%;
+      border: 1px solid #333;
+    }
+    .modal h2 { color: #00d4ff; margin-bottom: 20px; }
+    .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
+    
+    /* Simulation controls */
+    .sim-controls {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+      flex-wrap: wrap;
+    }
+    .sim-btn {
+      background: #333;
+      color: #eee;
+      border: none;
+      padding: 8px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.85em;
+    }
+    .sim-btn:hover { background: #444; }
+    
+    /* Status indicator */
+    .connection-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85em;
+      color: #888;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ff4757;
+    }
+    .status-dot.connected { background: #00ff88; }
+    
+    /* Completed strategies */
+    #completedStrategyList {
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .completed-item {
+      background: #1a1a2e;
+      padding: 10px;
+      border-radius: 6px;
+      margin-bottom: 8px;
+      border: 1px solid #333;
+    }
+    .completed-item .strategy-symbol {
+      color: #888;
+      font-weight: bold;
+    }
+    .completed-item .strategy-stats {
+      font-size: 0.8em;
+      color: #666;
+      margin-top: 5px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Price Ticker Header -->
+  <div class="price-header">
+    <div class="price-ticker">
+      <div class="ticker-item">
+        <span class="ticker-symbol">BTC</span>
+        <span class="ticker-price" id="price-BTCUSDT">$0.00</span>
+      </div>
+      <div class="ticker-item">
+        <span class="ticker-symbol">ETH</span>
+        <span class="ticker-price" id="price-ETHUSDT">$0.00</span>
+      </div>
+      <div class="ticker-item">
+        <span class="ticker-symbol">LTC</span>
+        <span class="ticker-price" id="price-LTCUSDT">$0.00</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="header">
+    <div>
+      <h1>CryptoBot</h1>
+      <div class="connection-status">
+        <div class="status-dot" id="wsStatus"></div>
+        <span id="wsStatusText">Connecting...</span>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-value" id="totalProfit">$0.00</div>
+        <div class="stat-label">Total Profit</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="activeStrategies">0</div>
+        <div class="stat-label">Active</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="openOrders">0</div>
+        <div class="stat-label">Open Orders</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="sidebar">
+      <h2>Active Strategies <button class="btn" onclick="showAddModal()" style="float:right;font-size:0.8em;padding:5px 10px;">+ Add</button></h2>
+      <div id="strategyList"></div>
+      
+      <h2 style="margin-top: 30px;">Mock Exchange</h2>
+      <div class="mock-panel">
+        <div id="mockPrices"></div>
+        <div class="sim-controls">
+          <button class="sim-btn" onclick="runSim('ETHUSDT', 'spike', 500, 5)">ETH +$500</button>
+          <button class="sim-btn" onclick="runSim('ETHUSDT', 'drop', 500, 5)">ETH -$500</button>
+          <button class="sim-btn" onclick="runSim('BTCUSDT', 'spike', 2000, 5)">BTC +$2k</button>
+          <button class="sim-btn" onclick="runSim('BTCUSDT', 'drop', 2000, 5)">BTC -$2k</button>
+        </div>
+      </div>
+      
+      <h2 style="margin-top: 30px;">Completed Strategies</h2>
+      <div id="completedStrategyList"></div>
+    </div>
+
+    <div class="main">
+      <div class="card">
+        <h3>Open Orders</h3>
+        <div class="order-list" id="orderList">
+          <p style="color:#666">No open orders</p>
+        </div>
+      </div>
+      
+      <div class="card">
+        <h3>Recent Trades</h3>
+        <div class="trade-list" id="tradeList">
+          <p style="color:#666">No completed trades yet</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Strategy Modal -->
+  <div class="modal-overlay" id="addModal">
+    <div class="modal">
+      <h2>Add Trading Strategy</h2>
+      <div class="form-group">
+        <label>Symbol</label>
+        <select id="newSymbol">
+          <option value="ETHUSDT">ETH/USDT</option>
+          <option value="BTCUSDT">BTC/USDT</option>
+          <option value="LTCUSDT">LTC/USDT</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Trade Amount</label>
+          <input type="number" id="newTradeAmount" value="0.01" step="0.001">
+        </div>
+        <div class="form-group">
+          <label>Total Budget ($)</label>
+          <input type="number" id="newTotalBudget" value="500" step="10">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Profit Target (%)</label>
+          <input type="number" id="newProfitTarget" value="1" step="0.1">
+        </div>
+        <div class="form-group">
+          <label>Grid Levels</label>
+          <input type="number" id="newGridLevels" value="2" min="1" max="10">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Grid Spacing ($)</label>
+          <input type="number" id="newGridSpacing" value="5" step="1">
+        </div>
+        <div class="form-group">
+          <label>Start Price ($)</label>
+          <input type="number" id="newStartPrice" placeholder="Current price">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="newAutoEnd"> Auto-end when all trades completed
+        </label>
+      </div>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="newEmergencyDrop" onchange="document.getElementById('emergencyDropOptions').style.display = this.checked ? 'block' : 'none'"> Enable Emergency Drop Protection
+        </label>
+        <div id="emergencyDropOptions" style="display:none; margin-left:20px; margin-top:5px;">
+          <label>Drop %: <input type="number" id="newEmergencyDropPercent" value="5" step="0.5" style="width:60px"></label>
+          <label>Max Orders: <input type="number" id="newEmergencyDropMaxOrders" value="3" min="1" style="width:50px"></label>
+        </div>
+      </div>
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-success" onclick="createStrategy()">Create Strategy</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // WebSocket connection
+    let ws = null;
+    let strategies = [];
+    let trades = [];
+    
+    function connectWS() {
+      ws = new WebSocket(`ws://${window.location.host}/ws`);
+      
+      ws.onopen = () => {
+        document.getElementById('wsStatus').classList.add('connected');
+        document.getElementById('wsStatusText').textContent = 'Connected';
+      };
+      
+      ws.onclose = () => {
+        document.getElementById('wsStatus').classList.remove('connected');
+        document.getElementById('wsStatusText').textContent = 'Disconnected';
+        setTimeout(connectWS, 3000);
+      };
+      
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        handleMessage(msg);
+      };
+    }
+    
+    function handleMessage(msg) {
+      switch (msg.type) {
+        case 'init':
+          updatePrices(msg.data.prices);
+          updateOrders(msg.data.orders);
+          loadStrategies();
+          break;
+        case 'price':
+          updatePrice(msg.data.symbol, msg.data.price, msg.data.frozen);
+          break;
+        case 'order_update':
+          loadOrders();
+          loadStrategies();
+          break;
+        case 'strategy_update':
+          loadStrategies();
+          break;
+        case 'prices':
+          updatePrices(msg.data);
+          break;
+      }
+    }
+    
+    // API calls
+    async function loadStrategies() {
+      const res = await fetch('/api/dca/strategies');
+      strategies = await res.json();
+      renderStrategies();
+      updateStats();
+    }
+    
+    async function loadOrders() {
+      const res = await fetch('/api/dca/mock/orders');
+      const orders = await res.json();
+      renderOrders(orders);
+    }
+    
+    async function loadTrades() {
+      const res = await fetch('/api/dca/trades');
+      trades = await res.json();
+      renderTrades();
+    }
+    
+    async function loadMockPrices() {
+      const res = await fetch('/api/dca/mock/prices');
+      const data = await res.json();
+      updatePrices(data.prices, data.frozen);
+      // Also explicitly update ticker for each price
+      for (const [symbol, price] of Object.entries(data.prices)) {
+        updateTickerPrice(symbol, price);
+      }
+    }
+    
+    // Render functions
+    function renderStrategies() {
+      // Separate active/paused from completed
+      const activeStrategies = strategies.filter(s => s.status !== 'completed');
+      const completedStrategies = strategies.filter(s => s.status === 'completed');
+      
+      // Render active/paused strategies
+      const list = document.getElementById('strategyList');
+      if (activeStrategies.length === 0) {
+        list.innerHTML = '<p style="color:#666;font-size:0.85em">No active strategies</p>';
+      } else {
+        list.innerHTML = activeStrategies.map(s => `
+          <div class="strategy-item ${s.status}" onclick="selectStrategy(${s.id})">
+            <div class="strategy-header">
+              <span class="strategy-symbol">${s.symbol}</span>
+              <span class="strategy-status status-${s.status}">${s.status}</span>
+              <button class="edit-btn" onclick="event.stopPropagation(); editStrategy(${s.id})">✏️ Edit</button>
+            </div>
+            <div class="strategy-stats">
+              <span>Total: $${s.totalAssets?.toFixed(2) || s.totalBudget?.toFixed(2)}</span>
+              <span>Cash: $${s.availableCash?.toFixed(2) || '0.00'}</span>
+              <span>${s.openOrders || 0} orders</span>
+              <span>$${s.stats?.totalProfit?.toFixed(2) || '0.00'} profit</span>
+              <span>${s.stats?.totalTrades || 0} trades</span>
+            </div>
+          </div>
+        `).join('');
+      }
+      
+      // Render completed strategies
+      const completedList = document.getElementById('completedStrategyList');
+      if (completedStrategies.length === 0) {
+        completedList.innerHTML = '<p style="color:#666;font-size:0.85em">No completed strategies</p>';
+      } else {
+        completedList.innerHTML = completedStrategies.map(s => `
+          <div class="completed-item" onclick="selectStrategy(${s.id})">
+            <div class="strategy-symbol">${s.symbol}</div>
+            <div class="strategy-stats">
+              <span>${s.stats?.totalTrades || 0} trades</span>
+              <span>$${s.stats?.totalProfit?.toFixed(2) || '0.00'} profit</span>
+              <span>Final: $${s.totalAssets?.toFixed(2) || s.totalBudget?.toFixed(2)}</span>
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+    
+    function editStrategy(id) {
+      const strategy = strategies.find(s => s.id === id);
+      if (!strategy) return;
+      
+      document.getElementById('addModal').classList.add('show');
+      
+      // Update modal for editing
+      document.querySelector('#addModal h2').textContent = 'Edit Trading Strategy';
+      
+      // Populate form with 'new' prefix fields
+      document.getElementById('newSymbol').value = strategy.symbol;
+      document.getElementById('newTradeAmount').value = strategy.tradeAmount;
+      document.getElementById('newTotalBudget').value = strategy.totalBudget;
+      document.getElementById('newProfitTarget').value = strategy.profitTarget;
+      document.getElementById('newGridLevels').value = strategy.gridLevels;
+      document.getElementById('newGridSpacing').value = strategy.gridSpacing;
+      document.getElementById('newStartPrice').value = strategy.startPrice || '';
+      document.getElementById('newAutoEnd').checked = strategy.autoEnd;
+      document.getElementById('newEmergencyDrop').checked = strategy.emergencyDropEnabled;
+      
+      // Populate emergency drop fields
+      document.getElementById('newEmergencyDropPercent').value = strategy.emergencyDropPercent || 5;
+      document.getElementById('newEmergencyDropMaxOrders').value = strategy.emergencyDropMaxOrders || 3;
+      document.getElementById('emergencyDropOptions').style.display = strategy.emergencyDropEnabled ? 'block' : 'none';
+      
+      // Change button to Save
+      document.querySelector('#addModal .btn-success').textContent = 'Save Changes';
+      document.querySelector('#addModal .btn-success').onclick = () => updateStrategy(strategy.id);
+    }
+    
+    async function updateStrategy(id) {
+      const data = {
+        symbol: document.getElementById('newSymbol').value,
+        tradeAmount: parseFloat(document.getElementById('newTradeAmount').value),
+        totalBudget: parseFloat(document.getElementById('newTotalBudget').value),
+        profitTarget: parseFloat(document.getElementById('newProfitTarget').value),
+        gridLevels: parseInt(document.getElementById('newGridLevels').value),
+        gridSpacing: parseFloat(document.getElementById('newGridSpacing').value),
+        startPrice: parseFloat(document.getElementById('newStartPrice').value) || undefined,
+        autoEnd: document.getElementById('newAutoEnd').checked,
+        emergencyDropEnabled: document.getElementById('newEmergencyDrop').checked,
+        emergencyDropPercent: parseFloat(document.getElementById('newEmergencyDropPercent').value) || 5,
+        emergencyDropMaxOrders: parseInt(document.getElementById('newEmergencyDropMaxOrders').value) || 3
+      };
+      
+      try {
+        const response = await fetch(`/api/dca/strategies/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        
+        if (!response.ok) {
+          const error = await response.text();
+          alert('Error updating strategy: ' + error);
+          return;
+        }
+        
+        closeModal();
+        loadStrategies();
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    }
+    
+    function renderOrders(orders) {
+      const list = document.getElementById('orderList');
+      if (!orders || orders.length === 0) {
+        list.innerHTML = '<p style="color:#666">No open orders</p>';
+        return;
+      }
+      list.innerHTML = orders.map(o => {
+        const estimatedFee = o.price * o.quantity * 0.001;
+        return `
+        <div class="order-item order-${o.side.toLowerCase()}">
+          <div>
+            <span class="order-side">${o.side}</span>
+            ${o.quantity} ${o.symbol.replace('USDT', '')} @ $${o.price.toFixed(2)}
+            ${o.fee ? `<span style="color:#888;font-size:0.8em;margin-left:8px">Fee: $${o.fee.toFixed(4)}</span>` : `<span style="color:#666;font-size:0.8em;margin-left:8px">Est: $${estimatedFee.toFixed(4)}</span>`}
+          </div>
+          <div>
+            <span style="color:#888;font-size:0.85em">${o.status}</span>
+          </div>
+        </div>
+      `}).join('');
+    }
+    
+    function renderTrades() {
+      const list = document.getElementById('tradeList');
+      if (!trades || trades.length === 0) {
+        list.innerHTML = '<p style="color:#666">No completed trades yet</p>';
+        return;
+      }
+      list.innerHTML = trades.slice(-10).reverse().map(t => {
+        const totalPaid = (t.buyPrice * t.quantity) + (t.fees || 0);
+        return `
+        <div class="trade-item">
+          <div>${t.symbol} ${t.quantity} @ Buy $${t.buyPrice.toFixed(2)} → Sell $${t.sellPrice.toFixed(2)}${t.fees ? `<span style="color:#888;font-size:0.8em;margin-left:8px">Fees: $${t.fees.toFixed(4)}</span>` : ''}<span style="color:#666;font-size:0.8em;margin-left:8px">Total: $${totalPaid.toFixed(2)}</span></div>
+          <div class="trade-profit">+$${t.profit.toFixed(2)}</div>
+        </div>
+      `}).join('');
+    }
+    
+    function updatePrices(prices, frozen = {}) {
+      const container = document.getElementById('mockPrices');
+      container.innerHTML = Object.entries(prices).map(([symbol, price]) => `
+        <div class="price-row">
+          <span>${symbol}</span>
+          <div>
+            <input type="number" class="price-input" value="${price}" 
+              onchange="setPrice('${symbol}', this.value)">
+            <button class="freeze-btn ${frozen[symbol] ? 'frozen' : ''}" 
+              onclick="toggleFreeze('${symbol}')">${frozen[symbol] ? '🔒' : '🔓'}</button>
+          </div>
+        </div>
+      `).join('');
+      
+      // Also update header ticker
+      for (const [symbol, price] of Object.entries(prices)) {
+        updateTickerPrice(symbol, price);
+      }
+    }
+    
+    function updatePrice(symbol, price, frozen) {
+      const row = document.querySelector(`#mockPrices .price-row:contains('${symbol}')`);
+      if (row) {
+        const input = row.querySelector('input');
+        input.value = price;
+      }
+      updateTickerPrice(symbol, price);
+    }
+    
+    function updateTickerPrice(symbol, price) {
+      const el = document.getElementById(`price-${symbol}`);
+      if (el) {
+        const formatted = symbol.includes('BTC') 
+          ? `$${parseFloat(price).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+          : `$${parseFloat(price).toFixed(2)}`;
+        el.textContent = formatted;
+      }
+    }
+    
+    function updateStats() {
+      const active = strategies.filter(s => s.status === 'active').length;
+      document.getElementById('activeStrategies').textContent = active;
+      
+      const profit = strategies.reduce((sum, s) => sum + (s.stats?.totalProfit || 0), 0);
+      document.getElementById('totalProfit').textContent = `$${profit.toFixed(2)}`;
+    }
+    
+    // Actions
+    async function setPrice(symbol, price) {
+      await fetch(`/api/dca/mock/prices/${symbol}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ price: parseFloat(price) })
+      });
+    }
+    
+    async function toggleFreeze(symbol) {
+      const res = await fetch(`/api/dca/mock/prices/${symbol}`);
+      const data = await res.json();
+      await fetch(`/api/dca/mock/prices/${symbol}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ freeze: !data.frozen })
+      });
+      loadMockPrices();
+    }
+    
+    async function runSim(symbol, mode, amount, duration) {
+      await fetch('/api/dca/mock/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol, mode, amount, duration })
+      });
+    }
+    
+    function showAddModal() {
+      document.getElementById('addModal').classList.add('show');
+      
+      // Reset title and button for create
+      document.querySelector('#addModal h2').textContent = 'Add Trading Strategy';
+      document.querySelector('#addModal .btn-success').textContent = 'Create Strategy';
+      document.querySelector('#addModal .btn-success').onclick = createStrategy;
+      
+      // Load current price
+      loadMockPrices();
+      document.getElementById('newStartPrice').value = document.querySelector('#mockPrices input')?.value || '';
+    }
+    
+    function closeModal() {
+      document.getElementById('addModal').classList.remove('show');
+    }
+    
+    async function createStrategy() {
+      const data = {
+        symbol: document.getElementById('newSymbol').value,
+        tradeAmount: parseFloat(document.getElementById('newTradeAmount').value),
+        totalBudget: parseFloat(document.getElementById('newTotalBudget').value),
+        profitTarget: parseFloat(document.getElementById('newProfitTarget').value),
+        gridLevels: parseInt(document.getElementById('newGridLevels').value),
+        gridSpacing: parseFloat(document.getElementById('newGridSpacing').value),
+        startPrice: parseFloat(document.getElementById('newStartPrice').value) || undefined,
+        autoEnd: document.getElementById('newAutoEnd').checked,
+        emergencyDropEnabled: document.getElementById('newEmergencyDrop').checked
+      };
+      
+      await fetch('/api/dca/strategies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      
+      closeModal();
+      loadStrategies();
+    }
+    
+    // Initialize
+    connectWS();
+    loadStrategies();
+    loadOrders();
+    loadTrades();
+    loadMockPrices();
+    
+    // Poll for updates
+    setInterval(() => {
+      loadOrders();
+      loadTrades();
+      loadStrategies();
+      loadMockPrices();
+    }, 3000);
+  </script>
+</body>
+</html>

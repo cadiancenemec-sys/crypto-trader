@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crypto Bot Dashboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+    }
+    
+    /* Fixed header with live prices */
+    .price-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(135deg, #16213e 0%, #1a1a2e 100%);
+      border-bottom: 1px solid #333;
+      padding: 15px 30px;
+      display: flex;
+      justify-content: center;
+      gap: 60px;
+      z-index: 100;
+      box-shadow: 0 2px 20px rgba(0,0,0,0.3);
+    }
+    
+    .price-item {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+    
+    .price-symbol {
+      font-weight: bold;
+      font-size: 18px;
+      color: #00d9ff;
+    }
+    
+    .price-value {
+      font-size: 24px;
+      font-weight: 600;
+      font-family: 'Courier New', monospace;
+    }
+    
+    .price-change {
+      font-size: 14px;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+    
+    .price-change.up {
+      color: #00c853;
+      background: rgba(0, 200, 83, 0.15);
+    }
+    
+    .price-change.down {
+      color: #ff5252;
+      background: rgba(255, 82, 82, 0.15);
+    }
+    
+    .connection-status {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      z-index: 101;
+    }
+    
+    .connection-status.connected {
+      background: rgba(0, 200, 83, 0.2);
+      color: #00c853;
+      border: 1px solid #00c853;
+    }
+    
+    .connection-status.disconnected {
+      background: rgba(255, 82, 82, 0.2);
+      color: #ff5252;
+      border: 1px solid #ff5252;
+    }
+    
+    .connection-status.connecting {
+      background: rgba(255, 193, 7, 0.2);
+      color: #ffc107;
+      border: 1px solid #ffc107;
+    }
+    
+    /* Main content */
+    .main-content {
+      padding-top: 120px;
+      padding: 120px 30px 30px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    
+    h1 {
+      margin-bottom: 30px;
+      font-size: 28px;
+    }
+    
+    .section {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 25px;
+      margin-bottom: 25px;
+      border: 1px solid #333;
+    }
+    
+    .section h2 {
+      font-size: 18px;
+      margin-bottom: 20px;
+      color: #00d9ff;
+    }
+    
+    /* Orders table */
+    .orders-list {
+      display: grid;
+      gap: 10px;
+    }
+    
+    .order-card {
+      background: #1a1a2e;
+      padding: 15px 20px;
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border: 1px solid #333;
+    }
+    
+    .order-side {
+      font-weight: bold;
+      padding: 4px 12px;
+      border-radius: 4px;
+    }
+    
+    .order-side.buy {
+      background: rgba(0, 200, 83, 0.2);
+      color: #00c853;
+    }
+    
+    .order-side.sell {
+      background: rgba(255, 82, 82, 0.2);
+      color: #ff5252;
+    }
+    
+    .order-details {
+      display: flex;
+      gap: 30px;
+    }
+    
+    .order-detail {
+      text-align: center;
+    }
+    
+    .order-detail-label {
+      font-size: 11px;
+      color: #888;
+      text-transform: uppercase;
+    }
+    
+    .order-detail-value {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    
+    /* Balance section */
+    .balance-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 20px;
+    }
+    
+    .balance-item {
+      background: #1a1a2e;
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+      border: 1px solid #333;
+    }
+    
+    .balance-asset {
+      font-size: 14px;
+      color: #888;
+      margin-bottom: 5px;
+    }
+    
+    .balance-amount {
+      font-size: 24px;
+      font-weight: bold;
+    }
+    
+    .balance-free {
+      font-size: 12px;
+      color: #666;
+      margin-top: 5px;
+    }
+    
+    /* Status bar */
+    .status-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #16213e;
+      border-top: 1px solid #333;
+      padding: 10px 30px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #888;
+    }
+    
+    .rate-limit {
+      display: flex;
+      gap: 20px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Fixed header with live prices -->
+  <div class="price-header">
+    <div class="price-item">
+      <span class="price-symbol">BTC</span>
+      <span class="price-value" id="btc-price">$0.00</span>
+      <span class="price-change" id="btc-change">0.00%</span>
+    </div>
+    <div class="price-item">
+      <span class="price-symbol">ETH</span>
+      <span class="price-value" id="eth-price">$0.00</span>
+      <span class="price-change" id="eth-change">0.00%</span>
+    </div>
+    <div class="price-item">
+      <span class="price-symbol">LTC</span>
+      <span class="price-value" id="ltc-price">$0.00</span>
+      <span class="price-change" id="ltc-change">0.00%</span>
+    </div>
+  </div>
+  
+  <!-- Connection status -->
+  <div class="connection-status disconnected" id="connection-status">
+    Disconnected
+  </div>
+  
+  <!-- Main content -->
+  <div class="main-content">
+    <h1>Crypto Bot Dashboard</h1>
+    
+    <!-- Account Balance -->
+    <div class="section">
+      <h2>Account Balance</h2>
+      <div class="balance-grid" id="balance-grid">
+        <div class="balance-item">
+          <div class="balance-asset">Loading...</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Open Orders -->
+    <div class="section">
+      <h2>Open Orders</h2>
+      <div class="orders-list" id="orders-list">
+        <div class="order-card">Loading...</div>
+      </div>
+    </div>
+    
+    <!-- Recent Trades -->
+    <div class="section">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2>Recent Trades</h2>
+        <select id="trade-symbol-select" onchange="fetchTrades()" style="
+          background: #1a1a2e;
+          color: #eee;
+          border: 1px solid #333;
+          padding: 8px 12px;
+          border-radius: 4px;
+          font-size: 14px;
+        ">
+          <option value="ETHUSD">ETHUSD</option>
+          <option value="ETHUSDT">ETHUSDT</option>
+          <option value="BTCUSD">BTCUSD</option>
+          <option value="BTCUSDT">BTCUSDT</option>
+          <option value="LTCUSD">LTCUSD</option>
+          <option value="LTCUSDT">LTCUSDT</option>
+        </select>
+      </div>
+      <div class="orders-list" id="trades-list">
+        <div class="order-card">Loading...</div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Status bar -->
+  <div class="status-bar">
+    <div>Last update: <span id="last-update">--</span></div>
+    <div class="rate-limit">
+      <span>Rate limit: <span id="rate-weight">0</span>/1200</span>
+      <span>Queue: <span id="queue-length">0</span></span>
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+    // Configuration
+    const API_BASE = 'https://api.binance.us';
+    // For WebSocket, we'll use REST API polling for now as it's more reliable
+    const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'LTCUSDT'];
+    const UPDATE_INTERVAL = 5000; // 5 seconds
+    
+    // Socket.io for real-time updates
+    const socket = io();
+    
+    // Listen for real-time order updates
+    socket.on('order-update', (order) => {
+      console.log('Order update received:', order);
+      
+      // Show notification
+      showNotification(`Order ${order.status}: ${order.side} ${order.symbol}`, order.status);
+      
+      // Refresh orders list
+      fetchOpenOrders();
+      
+      // Refresh trades list when an order fills
+      if (order.status === 'FILLED') {
+        fetchTrades();
+      }
+    });
+    
+    // Listen for account updates
+    socket.on('account-update', (data) => {
+      console.log('Account update:', data);
+      fetchAccountData();
+    });
+    
+    // Listen for balance updates
+    socket.on('balance-update', (data) => {
+      console.log('Balance update:', data);
+      fetchAccountData();
+    });
+    
+    // Listen for Binance connection status
+    socket.on('binance-status', (status) => {
+      console.log('Binance status:', status);
+      const statusEl = document.getElementById('connection-status');
+      if (status.connected) {
+        statusEl.textContent = 'Real-time';
+        statusEl.className = 'connection-status connected';
+      } else {
+        statusEl.textContent = 'Disconnected';
+        statusEl.className = 'connection-status disconnected';
+      }
+    });
+    
+    // Notification function
+    function showNotification(message, status) {
+      const notification = document.createElement('div');
+      notification.style.cssText = `
+        position: fixed;
+        top: 100px;
+        right: 20px;
+        background: ${status === 'FILLED' ? '#00c853' : status === 'CANCELED' ? '#ff5252' : '#00d9ff'};
+        color: white;
+        padding: 15px 20px;
+        border-radius: 8px;
+        z-index: 1000;
+        animation: slideIn 0.3s ease;
+      `;
+      notification.textContent = message;
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        notification.remove();
+      }, 5000);
+    }
+    
+    // Add animation style
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+    `;
+    document.head.appendChild(style);
+    
+    // State
+    let ws = null;
+    let previousPrices = {};
+    
+    // Update price display
+    function updatePrice(symbol, price, change) {
+      const priceEl = document.getElementById(`${symbol.toLowerCase()}-price`);
+      const changeEl = document.getElementById(`${symbol.toLowerCase()}-change`);
+      
+      if (priceEl) {
+        priceEl.textContent = `$${parseFloat(price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      }
+      
+      if (changeEl) {
+        changeEl.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+        changeEl.className = `price-change ${change >= 0 ? 'up' : 'down'}`;
+      }
+    }
+    
+    // Fetch prices using REST API (more reliable than WebSocket)
+    async function fetchPrices() {
+      const statusEl = document.getElementById('connection-status');
+      statusEl.textContent = 'Fetching...';
+      statusEl.className = 'connection-status connecting';
+      
+      try {
+        const symbols = ['BTCUSDT', 'ETHUSDT', 'LTCUSDT'];
+        
+        for (const symbol of symbols) {
+          try {
+            const response = await fetch(`/api/price/${symbol}`);
+            const data = await response.json();
+            
+            // Get 24hr change
+            const tickerRes = await fetch(`/api/ticker/${symbol}`);
+            const ticker = await tickerRes.json();
+            
+            const change = parseFloat(ticker.priceChangePercent) || 0;
+            const baseSymbol = symbol.replace('USDT', '');
+            updatePrice(baseSymbol, data.price, change);
+          } catch (e) {
+            console.error(`Failed to fetch ${symbol}:`, e);
+          }
+        }
+        
+        statusEl.textContent = 'Connected';
+        statusEl.className = 'connection-status connected';
+      } catch (e) {
+        console.error('Failed to fetch prices:', e);
+        statusEl.textContent = 'Error';
+        statusEl.className = 'connection-status disconnected';
+      }
+      
+      document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+    }
+    
+    // Fetch account data from backend
+    async function fetchAccountData() {
+      try {
+        const response = await fetch('/api/account');
+        const data = await response.json();
+        
+        const balanceGrid = document.getElementById('balance-grid');
+        balanceGrid.innerHTML = '';
+        
+        data.balances.forEach(balance => {
+          const free = parseFloat(balance.free);
+          const locked = parseFloat(balance.locked);
+          
+          if (free > 0 || locked > 0) {
+            balanceGrid.innerHTML += `
+              <div class="balance-item">
+                <div class="balance-asset">${balance.asset}</div>
+                <div class="balance-amount">${(free + locked).toFixed(6)}</div>
+                <div class="balance-free">Free: ${free.toFixed(6)} | Locked: ${locked.toFixed(6)}</div>
+              </div>
+            `;
+          }
+        });
+      } catch (e) {
+        console.error('Failed to fetch account:', e);
+      }
+    }
+    
+    // Fetch open orders
+    async function fetchOpenOrders() {
+      try {
+        const response = await fetch('/api/orders');
+        const orders = await response.json();
+        
+        const ordersList = document.getElementById('orders-list');
+        
+        if (orders.length === 0) {
+          ordersList.innerHTML = '<div class="order-card">No open orders</div>';
+          return;
+        }
+        
+        ordersList.innerHTML = orders.map(order => `
+          <div class="order-card">
+            <span class="order-side ${order.side.toLowerCase()}">${order.side}</span>
+            <div class="order-details">
+              <div class="order-detail">
+                <div class="order-detail-label">Symbol</div>
+                <div class="order-detail-value">${order.symbol}</div>
+              </div>
+              <div class="order-detail">
+                <div class="order-detail-label">Qty</div>
+                <div class="order-detail-value">${order.origQty}</div>
+              </div>
+              <div class="order-detail">
+                <div class="order-detail-label">Price</div>
+                <div class="order-detail-value">$${parseFloat(order.price).toFixed(2)}</div>
+              </div>
+              <div class="order-detail">
+                <div class="order-detail-label">Type</div>
+                <div class="order-detail-value">${order.type}</div>
+              </div>
+            </div>
+          </div>
+        `).join('');
+      } catch (e) {
+        console.error('Failed to fetch orders:', e);
+      }
+    }
+    
+    // Fetch recent trades
+    async function fetchTrades() {
+      try {
+        const symbolSelect = document.getElementById('trade-symbol-select');
+        const symbol = symbolSelect.value;
+        
+        const response = await fetch(`/api/trades/${symbol}?limit=10`);
+        const trades = await response.json();
+        
+        const tradesList = document.getElementById('trades-list');
+        
+        if (!trades || trades.length === 0) {
+          tradesList.innerHTML = '<div class="order-card">No recent trades</div>';
+          return;
+        }
+        
+        tradesList.innerHTML = trades.map(trade => `
+          <div class="order-card">
+            <span class="order-side ${trade.isBuyer ? 'buy' : 'sell'}">${trade.isBuyer ? 'BUY' : 'SELL'}</span>
+            <div class="order-details">
+              <div class="order-detail">
+                <div class="order-detail-label">Symbol</div>
+                <div class="order-detail-value">${trade.symbol}</div>
+              </div>
+              <div class="order-detail">
+                <div class="order-detail-label">Qty</div>
+                <div class="order-detail-value">${trade.qty}</div>
+              </div>
+              <div class="order-detail">
+                <div class="order-detail-label">Price</div>
+                <div class="order-detail-value">$${parseFloat(trade.price).toFixed(2)}</div>
+              </div>
+              <div class="order-detail">
+                <div class="order-detail-label">Total</div>
+                <div class="order-detail-value">$${parseFloat(trade.quoteQty).toFixed(2)}</div>
+              </div>
+              <div class="order-detail">
+                <div class="order-detail-label">Time</div>
+                <div class="order-detail-value">${new Date(trade.time).toLocaleDateString()}</div>
+              </div>
+            </div>
+          </div>
+        `).join('');
+      } catch (e) {
+        console.error('Failed to fetch trades:', e);
+      }
+    }
+    
+    // Initialize - fetch prices
+    fetchPrices();
+    
+    // Fetch data periodically
+    setInterval(() => {
+      fetchPrices();
+      fetchAccountData();
+      fetchOpenOrders();
+      fetchTrades();
+    }, 30000); // Every 30 seconds
+    
+    // Initial fetch
+    fetchAccountData();
+    fetchOpenOrders();
+    fetchTrades();
+  </script>
+</body>
+</html>
