@@ -5,6 +5,8 @@
 const express = require('express');
 const router = express.Router();
 const tradingDb = require('../trading-db');
+const trading = require('../trading-wrapper');
+const binance = require('../api');
 const mockExchange = require('../mock-exchange');
 const dcaBot = require('../dca-bot');
 
@@ -16,37 +18,44 @@ router.get('/strategies', (req, res) => {
   
   // Add stats to each strategy
   const withStats = strategies.map(s => {
-    // Calculate crypto holdings (ALL filled buys minus filled sells)
-    const allOrders = mockExchange.getAllOrders(s.symbol);
-    const filledBuys = allOrders.filter(o => o.side === 'BUY' && o.status === 'FILLED');
-    const filledSells = allOrders.filter(o => o.side === 'SELL' && o.status === 'FILLED');
+    // Calculate crypto holdings from gridSteps (works for both mock and prod)
+    const gridSteps = s.gridSteps || [];
+    const filledBuys = gridSteps.filter(step => step.status === 'filled_buy');
+    const filledSells = gridSteps.filter(step => step.status === 'completed');
+    const openBuys = gridSteps.filter(step => step.status === 'open_buy');
     
     // Calculate held quantity (ALL filled buys - ALL filled sells)
     let heldQuantity = 0;
     for (const buy of filledBuys) {
-      heldQuantity += buy.quantity;
+      heldQuantity += s.tradeAmount;
     }
     for (const sell of filledSells) {
-      heldQuantity -= sell.quantity;
+      heldQuantity -= s.tradeAmount;
     }
     heldQuantity = Math.max(0, heldQuantity);
     
-    // Calculate cost of open (pending) buy orders
-    const openBuyOrders = allOrders.filter(o => o.side === 'BUY' && o.status === 'NEW');
-    const openBuyCost = openBuyOrders.reduce((sum, o) => sum + (o.price * o.quantity), 0);
+    // Calculate cost of open (pending) buy orders from gridSteps
+    const openBuyCost = openBuys.reduce((sum, step) => sum + (step.price * s.tradeAmount), 0);
     
-    // Calculate cost of ALL filled buy orders (whether processed/sold or not) - money is still committed!
-    const filledBuyCost = allOrders
-      .filter(o => o.side === 'BUY' && o.status === 'FILLED')
-      .reduce((sum, o) => sum + (o.price * o.quantity), 0);
+    // Calculate cost of ALL filled buy orders - money is still committed!
+    const filledBuyCost = filledBuys.reduce((sum, step) => sum + (step.price * s.tradeAmount), 0);
     
     // Calculate total from filled sells (this frees up money)
-    const filledSellValue = allOrders
-      .filter(o => o.side === 'SELL' && o.status === 'FILLED')
-      .reduce((sum, o) => sum + (o.price * o.quantity), 0);
+    const filledSellValue = filledSells.reduce((sum, step) => sum + (step.price * s.tradeAmount), 0);
     
-    // Current price and crypto value
-    const currentPrice = mockExchange.getPrice(s.symbol);
+    // Current price and crypto value - use live price in prod
+    let currentPrice;
+    if (trading.USE_MOCK) {
+      currentPrice = mockExchange.getPrice(s.symbol);
+    } else {
+      // Get live price for prod
+      try {
+        const ticker = binance.trading.getPrice(s.symbol);
+        currentPrice = parseFloat(ticker.price);
+      } catch (e) {
+        currentPrice = 0;
+      }
+    }
     const cryptoValue = heldQuantity * currentPrice;
     
     // Available cash = total budget minus pending buys minus (filled buys minus filled sells)
@@ -55,10 +64,13 @@ router.get('/strategies', (req, res) => {
     const availableCash = s.totalBudget - openBuyCost - netCommitted;
     const totalAssets = availableCash + cryptoValue;
     
+    // Count open buy orders from gridSteps (works for both mock and real)
+    const openOrders = (s.gridSteps || []).filter(step => step.status === 'open_buy').length;
+    
     return {
       ...s,
       stats: tradingDb.getStrategyStats(s.id),
-      openOrders: mockExchange.getOpenOrders(s.symbol).filter(o => o.status === 'NEW').length,
+      openOrders,
       heldQuantity,
       cryptoValue,
       totalAssets,
@@ -80,13 +92,14 @@ router.get('/strategies/:id', (req, res) => {
   }
   
   const stats = tradingDb.getStrategyStats(strategy.id);
-  const openOrders = mockExchange.getOpenOrders(strategy.symbol);
+  // Count open buy orders from gridSteps (works for both mock and real)
+  const openOrders = (strategy.gridSteps || []).filter(step => step.status === 'open_buy');
   const trades = tradingDb.getAllCompletedTrades(strategy.id);
   
   res.json({
     ...strategy,
     stats,
-    openOrders: openOrders.filter(o => o.status === 'NEW'),
+    openOrders,
     recentTrades: trades.slice(-10)
   });
 });
@@ -195,6 +208,35 @@ router.get('/trades/profit', (req, res) => {
   res.json({ profit });
 });
 
+// ===== LIVE PRICES (from Binance US) =====
+
+router.get('/prices', async (req, res) => {
+  const useMock = process.env.USE_MOCK !== 'false';
+  
+  if (useMock) {
+    // Use mock prices (USDT pairs)
+    const prices = mockExchange.getAllPrices();
+    const state = mockExchange.getState();
+    return res.json({ prices, source: 'mock' });
+  }
+  
+  // Fetch live from Binance US (USD pairs for fiat accounts)
+  try {
+    const binance = require('../api');
+    const symbols = ['ETHUSD', 'BTCUSD', 'LTCUSD'];
+    const prices = {};
+    
+    for (const symbol of symbols) {
+      const ticker = await binance.trading.getPrice(symbol);
+      prices[symbol] = parseFloat(ticker.price);
+    }
+    
+    res.json({ prices, source: 'binance' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ===== MOCK EXCHANGE ROUTES =====
 
 // Get mock prices
@@ -233,6 +275,33 @@ router.post('/mock/simulate', (req, res) => {
   const { symbol, mode, amount, duration } = req.body;
   const result = mockExchange.runSimulation(symbol.toUpperCase(), mode, parseFloat(amount), parseInt(duration));
   res.json(result);
+});
+
+// Get orders (real or mock based on mode)
+router.get('/orders', (req, res) => {
+  // In prod, get orders from strategy gridSteps
+  if (!trading.USE_MOCK) {
+    const strategies = tradingDb.getAllStrategies();
+    const orders = [];
+    for (const strategy of strategies) {
+      for (const step of strategy.gridSteps || []) {
+        if (step.status === 'open_buy' && step.orderId) {
+          orders.push({
+            orderId: step.orderId,
+            symbol: strategy.symbol,
+            side: 'BUY',
+            price: step.price,
+            quantity: strategy.tradeAmount,
+            status: 'NEW'
+          });
+        }
+      }
+    }
+    return res.json(orders);
+  }
+  // In dev, use mock
+  const orders = mockExchange.getOpenOrders();
+  res.json(orders);
 });
 
 // Get mock orders
@@ -278,12 +347,15 @@ router.post('/mock/reset', (req, res) => {
 
 // ===== BOT STATUS =====
 
-router.get('/bot/status', (req, res) => {
-  const state = mockExchange.getState();
+router.get('/bot/status', async (req, res) => {
+  const state = trading.getState();
   const strategies = tradingDb.getAllStrategies();
   const activeCount = strategies.filter(s => s.status === 'active').length;
-  const openOrders = mockExchange.getOpenOrders().length;
+  const openOrders = trading.getOpenOrders().length;
   const totalProfit = tradingDb.getTotalProfit();
+  
+  // Get current prices
+  const prices = await trading.getAllPrices();
   
   res.json({
     running: true,
@@ -291,9 +363,43 @@ router.get('/bot/status', (req, res) => {
     totalStrategies: strategies.length,
     openOrders,
     totalProfit,
-    prices: state.prices,
-    frozen: state.frozen
+    prices,
+    frozen: state.frozen || {}
   });
+});
+
+// ===== ENVIRONMENT STATUS =====
+
+router.get('/status', (req, res) => {
+  res.json({
+    mode: trading.USE_MOCK ? 'development' : 'production',
+    useMock: trading.USE_MOCK
+  });
+});
+
+// ===== ACCOUNT BALANCE (for debugging) =====
+
+router.get('/account', async (req, res) => {
+  if (trading.USE_MOCK) {
+    const account = mockExchange.getAccount();
+    res.json(account);
+    return;
+  }
+  
+  try {
+    const account = await binance.trading.getAccount();
+    // Filter to show only balances with > 0
+    const balances = account.balances
+      .filter(b => parseFloat(b.free) > 0 || parseFloat(b.locked) > 0)
+      .map(b => ({
+        asset: b.asset,
+        free: b.free,
+        locked: b.locked
+      }));
+    res.json({ balances });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 module.exports = router;

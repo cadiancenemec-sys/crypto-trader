@@ -8,7 +8,7 @@ const WebSocket = require('ws');
 const fs = require('fs');
 const path = require('path');
 
-const DATA_DIR = path.join(__dirname, '../../../data');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../../../data');
 const STATE_FILE = path.join(DATA_DIR, 'mock-exchange-state.json');
 
 // In-memory state
@@ -33,7 +33,9 @@ function loadState() {
   try {
     if (fs.existsSync(STATE_FILE)) {
       const data = fs.readFileSync(STATE_FILE, 'utf8');
-      state = JSON.parse(data);
+      const loaded = JSON.parse(data);
+      // Merge with defaults to ensure all required properties exist
+      state = { ...state, ...loaded };
     }
   } catch (e) {
     console.log('[Mock] Starting fresh state');
