@@ -7,7 +7,7 @@
 const path = require('path');
 const fs = require('fs');
 
-const DATA_DIR = path.join(__dirname, '../../data');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../../data');
 const STRATEGIES_FILE = path.join(DATA_DIR, 'strategies.json');
 const TRADES_FILE = path.join(DATA_DIR, 'completed-trades.json');
 

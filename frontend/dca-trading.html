@@ -284,15 +284,15 @@
     <div class="price-ticker">
       <div class="ticker-item">
         <span class="ticker-symbol">BTC</span>
-        <span class="ticker-price" id="price-BTCUSDT">$0.00</span>
+        <span class="ticker-price" id="price-BTCUSD">$0.00</span>
       </div>
       <div class="ticker-item">
         <span class="ticker-symbol">ETH</span>
-        <span class="ticker-price" id="price-ETHUSDT">$0.00</span>
+        <span class="ticker-price" id="price-ETHUSD">$0.00</span>
       </div>
       <div class="ticker-item">
         <span class="ticker-symbol">LTC</span>
-        <span class="ticker-price" id="price-LTCUSDT">$0.00</span>
+        <span class="ticker-price" id="price-LTCUSD">$0.00</span>
       </div>
     </div>
   </div>
@@ -365,9 +365,9 @@
       <div class="form-group">
         <label>Symbol</label>
         <select id="newSymbol">
-          <option value="ETHUSDT">ETH/USDT</option>
-          <option value="BTCUSDT">BTC/USDT</option>
-          <option value="LTCUSDT">LTC/USDT</option>
+          <option value="ETHUSD">ETH/USD</option>
+          <option value="BTCUSD">BTC/USD</option>
+          <option value="LTCUSD">LTC/USD</option>
         </select>
       </div>
       <div class="form-row">
@@ -426,6 +426,58 @@
     let ws = null;
     let strategies = [];
     let trades = [];
+    let isProduction = false;
+    
+    // Check environment on load
+    async function checkEnvironment() {
+      try {
+        const res = await fetch('/api/dca/status');
+        const data = await res.json();
+        isProduction = !data.useMock;
+        
+        if (!isProduction) {
+          // In dev mode, use USDT pairs instead
+          const symbolSelect = document.getElementById('newSymbol');
+          if (symbolSelect) {
+            symbolSelect.innerHTML = `
+              <option value="ETHUSDT">ETH/USDT</option>
+              <option value="BTCUSDT">BTC/USDT</option>
+              <option value="LTCUSDT">LTC/USDT</option>
+            `;
+          }
+          // Also update ticker IDs for USDT
+          const priceEth = document.getElementById('price-ETHUSD');
+          const priceBtc = document.getElementById('price-BTCUSD');
+          const priceLtc = document.getElementById('price-LTCUSD');
+          if (priceEth) priceEth.id = 'price-ETHUSDT';
+          if (priceBtc) priceBtc.id = 'price-BTCUSDT';
+          if (priceLtc) priceLtc.id = 'price-LTCUSDT';
+        } else {
+          // Replace mock panel with production indicator
+          const sidebarTitle = document.querySelector('.sidebar h2:nth-of-type(2)');
+          if (sidebarTitle) sidebarTitle.textContent = 'Environment';
+          const mockPanel = document.querySelector('.mock-panel');
+          if (mockPanel) {
+            mockPanel.innerHTML = `
+              <div style="text-align:center;padding:20px;">
+                <div style="font-size:4em;margin-bottom:10px;">🔴</div>
+                <div style="color:#ff4444;font-weight:bold;font-size:1.2em;">PRODUCTION</div>
+                <div style="color:#888;margin-top:5px;">Connected to Binance US</div>
+                <div style="color:#666;margin-top:10px;font-size:0.9em;">
+                  Real orders will be placed!<br>
+                  Use with caution
+                </div>
+              </div>
+            `;
+          }
+          // Hide simulation controls in prod
+          const simControls = document.querySelector('.sim-controls');
+          if (simControls) simControls.style.display = 'none';
+        }
+      } catch (e) {
+        console.error('Failed to check environment:', e);
+      }
+    }
     
     function connectWS() {
       ws = new WebSocket(`ws://${window.location.host}/ws`);
@@ -479,7 +531,8 @@
     }
     
     async function loadOrders() {
-      const res = await fetch('/api/dca/mock/orders');
+      // Use /orders which works in both prod and dev
+      const res = await fetch('/api/dca/orders');
       const orders = await res.json();
       renderOrders(orders);
     }
@@ -491,7 +544,8 @@
     }
     
     async function loadMockPrices() {
-      const res = await fetch('/api/dca/mock/prices');
+      // Use /prices which fetches live Binance US in prod, mock in dev
+      const res = await fetch('/api/dca/prices');
       const data = await res.json();
       updatePrices(data.prices, data.frozen);
       // Also explicitly update ticker for each price
@@ -652,17 +706,19 @@
     
     function updatePrices(prices, frozen = {}) {
       const container = document.getElementById('mockPrices');
-      container.innerHTML = Object.entries(prices).map(([symbol, price]) => `
-        <div class="price-row">
-          <span>${symbol}</span>
-          <div>
-            <input type="number" class="price-input" value="${price}" 
-              onchange="setPrice('${symbol}', this.value)">
-            <button class="freeze-btn ${frozen[symbol] ? 'frozen' : ''}" 
-              onclick="toggleFreeze('${symbol}')">${frozen[symbol] ? '🔒' : '🔓'}</button>
+      if (container) {
+        container.innerHTML = Object.entries(prices).map(([symbol, price]) => `
+          <div class="price-row">
+            <span>${symbol}</span>
+            <div>
+              <input type="number" class="price-input" value="${price}" 
+                onchange="setPrice('${symbol}', this.value)">
+              <button class="freeze-btn ${frozen[symbol] ? 'frozen' : ''}" 
+                onclick="toggleFreeze('${symbol}')">${frozen[symbol] ? '🔒' : '🔓'}</button>
+            </div>
           </div>
-        </div>
-      `).join('');
+        `).join('');
+      }
       
       // Also update header ticker
       for (const [symbol, price] of Object.entries(prices)) {
@@ -680,7 +736,9 @@
     }
     
     function updateTickerPrice(symbol, price) {
+      console.log('updateTickerPrice called:', symbol, price);
       const el = document.getElementById(`price-${symbol}`);
+      console.log('Element found:', el, 'id: price-' + symbol);
       if (el) {
         const formatted = symbol.includes('BTC') 
           ? `$${parseFloat(price).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
@@ -765,12 +823,16 @@
       loadStrategies();
     }
     
-    // Initialize
-    connectWS();
-    loadStrategies();
-    loadOrders();
-    loadTrades();
-    loadMockPrices();
+    // Initialize - wait for DOM
+    document.addEventListener('DOMContentLoaded', () => {
+      checkEnvironment().then(() => {
+        connectWS();
+        loadStrategies();
+        loadOrders();
+        loadTrades();
+        loadMockPrices();
+      });
+    });
     
     // Poll for updates
     setInterval(() => {

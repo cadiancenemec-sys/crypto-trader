@@ -4,7 +4,7 @@
  * Handles the core trading logic for DCA/grid strategies
  */
 
-const mockExchange = require('./mock-exchange');
+const trading = require('./trading-wrapper');
 const tradingDb = require('./trading-db');
 
 // Bot state
@@ -58,10 +58,10 @@ async function tick() {
 // Process a single strategy
 async function processStrategy(strategy) {
   const symbol = strategy.symbol;
-  const currentPrice = mockExchange.getPrice(symbol);
+  const currentPrice = await trading.getPrice(symbol);
   
   // Get all orders for this strategy's symbol (including filled)
-  const allOrders = mockExchange.getAllOrders(symbol);
+  const allOrders = trading.getAllOrders(symbol);
   const buyOrders = allOrders.filter(o => o.side === 'BUY');
   const sellOrders = allOrders.filter(o => o.side === 'SELL');
   const openOrders = allOrders.filter(o => o.status === 'NEW');
@@ -73,7 +73,7 @@ async function processStrategy(strategy) {
   const updatedStrategy = tradingDb.getStrategy(strategy.id);
   
   // 3. Re-fetch open orders after processing fills
-  const currentOrders = mockExchange.getAllOrders(symbol);
+  const currentOrders = trading.getAllOrders(symbol);
   const openBuyOrders = currentOrders.filter(o => o.side === 'BUY' && o.status === 'NEW');
   
   // Place more buys if we can afford them (based on available cash, regardless of pending sells)
@@ -105,7 +105,7 @@ async function processFills(strategy, buyOrders, sellOrders) {
       const newUsableBudget = (freshStrategy.usableBudget || freshStrategy.totalBudget) - orderCost;
       tradingDb.updateStrategy(strategy.id, { usableBudget: Math.max(0, newUsableBudget) });
       
-      const mockOrder = mockExchange.placeOrder(
+      const mockOrder = trading.placeOrder(
         strategy.symbol,
         'SELL',
         order.quantity,
@@ -132,7 +132,7 @@ async function processFills(strategy, buyOrders, sellOrders) {
       
       // Mark as processed so we don't create duplicate sells
       order.processed = true;
-      mockExchange.saveState();
+      trading.saveState();
       console.log(`[DCA Bot] Buy filled @ ${order.price} ($${orderCost.toFixed(2)}), usable budget now $${Math.max(0, newUsableBudget).toFixed(2)}`);
       broadcastOrder(mockOrder);
     }
@@ -145,7 +145,7 @@ async function processFills(strategy, buyOrders, sellOrders) {
       const freshStrategy = tradingDb.getStrategy(strategy.id);
       
       // Find the original buy price (find the most recent processed buy order)
-      const allOrders = mockExchange.getAllOrders(strategy.symbol);
+      const allOrders = trading.getAllOrders(strategy.symbol);
       const filledBuys = allOrders.filter(o => o.side === 'BUY' && o.status === 'FILLED' && o.processed === true);
       const buyOrder = filledBuys[filledBuys.length - 1];
       
@@ -193,18 +193,19 @@ async function processFills(strategy, buyOrders, sellOrders) {
       
       // Mark as processed
       order.processed = true;
-      mockExchange.saveState();
+      trading.saveState();
       
       console.log(`[DCA Bot] Sell filled @ ${order.price}, profit: $${profit.toFixed(2)}, usable budget now $${cappedBudget.toFixed(2)}`);
       
       // Recreate buy orders UNLESS auto-end is enabled (finish existing trades but don't start new ones)
       if (!freshStrategy.autoEnd) {
         const freshForBuyOrders = tradingDb.getStrategy(strategy.id);
-        await placeBuyOrders(freshForBuyOrders, mockExchange.getPrice(freshStrategy.symbol), []);
+        const price = await trading.getPrice(freshStrategy.symbol);
+        await placeBuyOrders(freshForBuyOrders, price, []);
       } else {
         // Auto-end enabled: mark strategy as completed when all trades are done
         // Check if there are any open buys or pending sells
-        const allOrders = mockExchange.getAllOrders(freshStrategy.symbol);
+        const allOrders = trading.getAllOrders(freshStrategy.symbol);
         const openBuys = allOrders.filter(o => o.side === 'BUY' && o.status === 'NEW');
         const pendingSells = allOrders.filter(o => o.side === 'SELL' && o.status === 'NEW');
         
@@ -232,7 +233,7 @@ async function placeBuyOrders(strategy, currentPrice, existingBuyOrders) {
   const amount = strategy.tradeAmount;
   
   // Get all orders to calculate what's committed
-  const allOrders = mockExchange.getAllOrders(symbol);
+  const allOrders = trading.getAllOrders(symbol);
   
   // Calculate cost of already-open (NEW) buy orders
   const openBuyCost = allOrders
@@ -277,9 +278,16 @@ async function placeBuyOrders(strategy, currentPrice, existingBuyOrders) {
   
   // Determine which levels are "busy" (not available)
   // A level is busy if it has an open buy, or a filled buy awaiting sell, or a pending sell
+  // BUT: if status is "open_buy" with no orderId, it means order was never actually placed - treat as available
   const busyLevels = new Set();
   for (const step of gridSteps) {
-    if (step.status === 'open_buy' || step.status === 'filled_buy' || step.status === 'pending_sell') {
+    if (step.status === 'open_buy') {
+      // If there's no orderId, the order was never actually placed on Binance - treat as available
+      if (step.orderId || step.buyOrderId) {
+        busyLevels.add(step.level);
+      }
+      // else: not actually busy, will try to place order
+    } else if (step.status === 'filled_buy' || step.status === 'pending_sell') {
       busyLevels.add(step.level);
     }
   }
@@ -308,7 +316,7 @@ async function placeBuyOrders(strategy, currentPrice, existingBuyOrders) {
   
   // Place the orders and update grid steps
   for (const { level, price } of ordersToPlace) {
-    const order = mockExchange.placeOrder(symbol, 'BUY', amount, price);
+    const order = await trading.placeOrder(symbol, 'BUY', amount, price);
     console.log(`[DCA Bot] Placed buy order: ${amount} ${symbol} @ $${price} (level ${level})`);
     
     // Update grid step to track this order
@@ -351,7 +359,7 @@ function broadcastToAll(data) {
 
 function broadcastStrategyUpdate(strategy) {
   const stats = tradingDb.getStrategyStats(strategy.id);
-  const openOrders = mockExchange.getOpenOrders(strategy.symbol);
+  const openOrders = trading.getOpenOrders(strategy.symbol);
   const trades = tradingDb.getAllCompletedTrades(strategy.id).slice(-5);
   
   broadcastToAll({
@@ -377,7 +385,7 @@ function getStatus() {
   return {
     running: isRunning,
     activeStrategies: tradingDb.getActiveStrategies().length,
-    openOrders: mockExchange.getOpenOrders().length
+    openOrders: trading.getOpenOrders().length
   };
 }
 

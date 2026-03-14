@@ -48,17 +48,39 @@ io.on('connection', (socket) => {
 });
 
 // WebSocket for DCA bot updates
-wss.on('connection', (ws) => {
+wss.on('connection', async (ws) => {
   console.log('[WS] DCA client connected');
   
-  // Send initial state
-  const state = mockExchange.getState();
+  // Send initial state - use live prices in prod
+  let prices = {};
+  let orders = [];
+  
+  if (process.env.USE_MOCK === 'false') {
+    // Prod: get live prices from Binance
+    try {
+      const [eth, btc, ltc] = await Promise.all([
+        binance.trading.getPrice('ETHUSD'),
+        binance.trading.getPrice('BTCUSD'),
+        binance.trading.getPrice('LTCUSD')
+      ]);
+      prices = {
+        ETHUSD: parseFloat(eth.price),
+        BTCUSD: parseFloat(btc.price),
+        LTCUSD: parseFloat(ltc.price)
+      };
+    } catch (e) {
+      console.error('Failed to fetch live prices:', e.message);
+    }
+  } else {
+    // Dev: use mock
+    const state = mockExchange.getState();
+    prices = state.prices;
+    orders = mockExchange.getOpenOrders();
+  }
+  
   ws.send(JSON.stringify({
     type: 'init',
-    data: {
-      prices: state.prices,
-      orders: mockExchange.getOpenOrders()
-    }
+    data: { prices, orders }
   }));
   
   ws.on('close', () => {
