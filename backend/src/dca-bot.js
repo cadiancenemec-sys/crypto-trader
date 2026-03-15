@@ -108,14 +108,18 @@ async function checkMissingOrders() {
             continue;
           }
           
-          // If sell is filled, mark as completed
+          // If sell is filled, mark as available to restart the cycle
           if (sellOrder.status === 'FILLED') {
-            // Sell completed - update to completed
+            // Sell completed - reset to available so a new buy can be placed
             tradingDb.updateGridStep(strategy.id, step.level, {
-              status: 'completed',
-              completedAt: new Date().toISOString()
+              status: 'available',
+              orderId: null,
+              buyOrderId: null,
+              sellOrderId: null,
+              filledAt: null,
+              completedAt: null
             });
-            console.log(`[DCA Safety] Sell order ${step.sellOrderId} confirmed filled, marking completed`);
+            console.log(`[DCA Safety] Sell order ${step.sellOrderId} filled, reset to available for next cycle`);
             
             // Record the trade
             const filledBuy = allOrders.find(o => o.side === 'BUY' && o.status === 'FILLED' && Math.abs(parseFloat(o.price) - (sellOrder.price / (1 + strategy.profitTarget / 100))) < 1);
