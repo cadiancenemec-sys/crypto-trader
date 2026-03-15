@@ -28,14 +28,22 @@ let listenKeyInterval = null;
 app.use(cors());
 app.use(express.json());
 
-// Serve static frontend files
+// Serve static frontend files with cache-busting for HTML
 const frontendPath = path.join(__dirname, '..', '..', 'frontend');
 console.log('Serving frontend from:', frontendPath);
-app.use(express.static(frontendPath));
+app.use(express.static(frontendPath, {
+  setHeaders: (res, path, stat) => {
+    if (path.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+  }
+}));
 
-// Serve index.html at root
+// Serve dca-trading.html at root (main trading interface)
 app.get('/', (req, res) => {
-  res.sendFile(path.join(frontendPath, 'index.html'));
+  res.sendFile(path.join(frontendPath, 'dca-trading.html'));
 });
 
 // Socket.io for general updates
@@ -285,10 +293,15 @@ async function start() {
   // Log startup
   dbHelpers.log('SERVER_START', `Starting crypto-bot server on port ${PORT}`);
   
-  // Start DCA bot
+  // Start DCA bot - wrapped to prevent crash on API errors
   dcaBot.init(wss.clients);
-  dcaBot.start(5000);
-  console.log('[DCA Bot] Started');
+  try {
+    dcaBot.start(5000);
+    console.log('[DCA Bot] Started');
+  } catch (e) {
+    console.error('[Index] DCA bot start error:', e.message);
+    console.log('[Index] Server continuing without DCA bot');
+  }
   
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`Crypto Bot server running at http://localhost:${PORT}`);
@@ -300,7 +313,20 @@ async function start() {
   // await startUserDataStream();
 }
 
-start().catch(console.error);
+// Prevent uncaught exceptions from crashing the server
+process.on('uncaughtException', (err) => {
+  console.error('[Index] Uncaught exception:', err.message);
+  console.log('[Index] Server continuing...');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Index] Unhandled rejection:', reason);
+  console.log('[Index] Server continuing...');
+});
+
+start().catch(err => {
+  console.error('[Index] Start error:', err.message);
+});
 
 // Export for testing
 module.exports = { app };

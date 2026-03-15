@@ -131,13 +131,35 @@ When a buy fills, it places a sell at `buyPrice * (1 + profitTarget/100)`.
 - Status values: `available`, `open_buy`, `filled_buy`, `pending_sell`, `completed`
 - Store Binance orderId for tracking
 
+**Order Processing Persistence** (NEW 2026-03-15)
+- `data-prod/processed-orders.json` tracks processed order IDs
+- Prevents re-processing same orders on restart
+- Functions: `markOrderProcessed()`, `isOrderProcessed()`, `saveState()`
+
+**Profit Tracking** (NEW 2026-03-15)
+- `completed-trades.json` cleared on bot startup
+- Only tracks profit from CURRENT session
+- Function: `clearCompletedTrades()`
+
+**Stale Order Cleanup** (NEW 2026-03-15)
+- On startup, cancels Binance orders not in current grid
+- Safety check detects stale open_buy orders and resets grid steps
+- Prevents orphaned orders from blocking new trades
+
 **Available Cash Calculation**
 ```
-openBuyCost = sum of all open_buy order values
-filledBuyCost = sum of all filled_buy order values
-filledSellValue = sum of all completed (sold) order values
-netCommitted = filledBuyCost - filledSellValue
-availableCash = totalBudget - openBuyCost - netCommitted
+// FIXED (2026-03-15): Use grid status instead of all Binance history
+// This prevents stale historical orders from blocking new orders
+openBuyCost = gridSteps.filter(s => s.status === 'open_buy').reduce(...)
+netCommitted = gridSteps.filter(s => s.status === 'pending_sell').reduce(...)
+availableCash = usableBudget - openBuyCost - netCommitted
+
+// OLD (buggy - counted ALL historical Binance orders):
+// openBuyCost = allOrders.filter(o => o.side === 'BUY' && o.status === 'NEW')...
+// filledBuyCost = allOrders.filter(o => o.side === 'BUY' && o.status === 'FILLED')...
+// filledSellValue = allOrders.filter(o => o.side === 'SELL' && o.status === 'FILLED')...
+// netCommitted = filledBuyCost - filledSellValue
+// availableCash = totalBudget - openBuyCost - netCommitted
 ```
 
 ### 8. Files to Create
@@ -157,16 +179,22 @@ availableCash = totalBudget - openBuyCost - netCommitted
 - processStrategy() - process each strategy
 - placeBuyOrders() - place limit orders at grid levels
 - checkEmergencyDrop() - emergency protection
+- **NEW**: `start()` clears completed trades and cancels stale Binance orders on startup
+- **NEW**: `checkMissingOrders()` safety check detects stale open_buy orders and resets grid steps
 
 **backend/src/trading-wrapper.js**
 - Wrapper around binance API and mockExchange
 - getPrice(), getAllOrders(), getOpenOrders(), placeOrder(), cancelOrder()
 - Use USD pairs in prod, USDT in dev
+- **NEW**: `markOrderProcessed(orderId)` - mark order as processed (persisted to processed-orders.json)
+- **NEW**: `isOrderProcessed(orderId)` - check if order was already processed
+- **NEW**: `saveState()` / `getState()` - persist processed order IDs
 
 **backend/src/trading-db.js**
 - SQLite operations
 - createStrategy(), getStrategy(), updateStrategy(), deleteStrategy()
 - updateGridStep(), getAllStrategies()
+- **NEW**: `clearCompletedTrades()` - clear completed trades (called on startup)
 
 **backend/src/mock-exchange/index.js**
 - In-memory mock trading for dev mode

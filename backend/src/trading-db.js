@@ -176,6 +176,12 @@ function addCompletedTrade(trade) {
   return record;
 }
 
+function clearCompletedTrades() {
+  completedTrades = [];
+  saveJSON(TRADES_FILE, completedTrades);
+  console.log('[Trading DB] Cleared completed trades');
+}
+
 function getTotalProfit(strategyId = null) {
   const trades = strategyId 
     ? completedTrades.filter(t => t.strategyId === strategyId)
@@ -187,10 +193,17 @@ function getTotalProfit(strategyId = null) {
 
 function getStrategyStats(id) {
   const trades = completedTrades.filter(t => t.strategyId === id);
+  const strategy = getStrategy(id);
+  const gridSteps = strategy?.gridSteps || [];
+  
+  // Count open orders (pending_sell = active SELL orders on Binance)
+  const openOrders = gridSteps.filter(s => s.status === 'pending_sell').length;
+  
   return {
     totalTrades: trades.length,
     totalProfit: trades.reduce((sum, t) => sum + (t.profit || 0), 0),
-    totalVolume: trades.reduce((sum, t) => sum + (t.quantity * t.buyPrice), 0)
+    totalVolume: trades.reduce((sum, t) => sum + (t.quantity * t.buyPrice), 0),
+    openOrders: openOrders
   };
 }
 
@@ -206,6 +219,7 @@ module.exports = {
   // Completed trades
   getAllCompletedTrades,
   addCompletedTrade,
+  clearCompletedTrades,
   getTotalProfit,
   getStrategyStats,
   

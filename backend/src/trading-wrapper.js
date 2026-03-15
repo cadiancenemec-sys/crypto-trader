@@ -7,8 +7,37 @@
 
 const mockExchange = require('./mock-exchange');
 const binance = require('./api');
+const fs = require('fs');
+const path = require('path');
 
 const USE_MOCK = process.env.USE_MOCK !== 'false';
+const STATE_FILE = path.join(__dirname, '..', '..', 'data-prod', 'processed-orders.json');
+
+// Track processed order IDs for real Binance
+let processedOrderIds = new Set();
+
+// Load processed orders on startup
+function loadProcessedOrders() {
+  if (USE_MOCK) return;
+  try {
+    if (fs.existsSync(STATE_FILE)) {
+      const data = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+      processedOrderIds = new Set(data.processedOrderIds || []);
+      console.log('[Trading] Loaded', processedOrderIds.size, 'processed order IDs');
+    }
+  } catch (e) {
+    console.log('[Trading] No processed orders file yet');
+  }
+}
+loadProcessedOrders();
+
+function isOrderProcessed(orderId) {
+  return processedOrderIds.has(String(orderId));
+}
+
+function markOrderProcessed(orderId) {
+  processedOrderIds.add(String(orderId));
+}
 
 // Cache for real prices
 let priceCache = {};
@@ -58,31 +87,58 @@ async function getAllPrices() {
 
 // Get all orders for a symbol (sync for mock, async for real)
 async function getAllOrders(symbol) {
+  if (!symbol) {
+    console.error('[Trading] getAllOrders called with empty symbol');
+    return [];
+  }
   if (USE_MOCK) {
     return mockExchange.getAllOrders(symbol);
   }
   
-  // Real Binance - fetch all orders
+  // Real Binance - fetch all orders (including filled)
   try {
-    const result = await binance.trading.getAllOrders(symbol);
+    // Fetch open orders
+    const openResult = await binance.trading.getAllOrders(symbol);
     // Make sure we return an array - handle any response format
-    if (!result) {
+    if (!openResult) {
       return [];
     }
     
-    let orders = result;
-    if (!Array.isArray(result) && typeof result === 'object') {
-      if (Array.isArray(result.data)) orders = result.data;
-      else if (Array.isArray(result.orders)) orders = result.orders;
-      else if (Array.isArray(result.result)) orders = result.result;
+    let openOrders = openResult;
+    if (!Array.isArray(openResult) && typeof openResult === 'object') {
+      if (Array.isArray(openResult.data)) openOrders = openResult.data;
+      else if (Array.isArray(openResult.orders)) openOrders = openResult.orders;
+      else if (Array.isArray(openResult.result)) openOrders = openResult.result;
       else {
-        console.log(`[Trading] getAllOrders unexpected response type:`, typeof result);
-        return [];
+        console.log(`[Trading] getAllOrders unexpected response type:`, typeof openResult);
+        openOrders = [];
       }
     }
     
+    // Fetch trade history to find filled orders
+    let filledFromTrades = [];
+    try {
+      const trades = await binance.fetchMyTrades(symbol);
+      if (Array.isArray(trades)) {
+        // Convert trades to order format
+        filledFromTrades = trades.map(t => ({
+          orderId: t.orderId,
+          quantity: t.amount || t.quantity || 0,
+          price: t.price || 0,
+          side: t.side || t.type,
+          status: 'FILLED',
+          filledAt: new Date(t.timestamp || t.time).toISOString()
+        }));
+      }
+    } catch (e) {
+      console.log(`[Trading] Could not fetch trade history:`, e.message);
+    }
+    
+    // Merge open orders with filled orders from trades
+    const allOrders = [...openOrders, ...filledFromTrades];
+    
     // Normalize field names for consistency (Binance uses origQty)
-    return orders.map(o => ({
+    return allOrders.map(o => ({
       ...o,
       quantity: o.quantity || o.origQty || o.executedQty || 0,
       price: o.price || 0,
@@ -111,16 +167,28 @@ async function getOpenOrders(symbol) {
   }
 }
 
+// Get precision settings for each trading pair
+function getPrecision(symbol) {
+  const precisionConfig = {
+    'ETHUSD': { price: 2, qty: 4 },
+    'BTCUSD': { price: 2, qty: 6 },
+    'LTCUSD': { price: 2, qty: 8 },
+    'ETHUSDT': { price: 2, qty: 4 },
+    'BTCUSDT': { price: 2, qty: 6 },
+    'LTCUSDT': { price: 2, qty: 8 }
+  };
+  return precisionConfig[symbol] || { price: 2, qty: 4 };
+}
+
 async function placeOrder(symbol, side, quantity, price) {
   if (USE_MOCK) {
     return mockExchange.placeOrder(symbol, side, quantity, price);
   }
   
-  // Round values to Binance precision limits
-  const pricePrecision = 2;  // ETHUSD price: 2 decimals
-  const qtyPrecision = 4;     // ETH quantity: 4 decimals
-  const roundedPrice = Math.round(price * Math.pow(10, pricePrecision)) / Math.pow(10, pricePrecision);
-  const roundedQty = Math.round(quantity * Math.pow(10, qtyPrecision)) / Math.pow(10, qtyPrecision);
+  // Round values to Binance precision limits based on pair
+  const precision = getPrecision(symbol);
+  const roundedPrice = Math.round(price * Math.pow(10, precision.price)) / Math.pow(10, precision.price);
+  const roundedQty = Math.round(quantity * Math.pow(10, precision.qty)) / Math.pow(10, precision.qty);
   
   // Real Binance - place limit order
   try {
@@ -185,8 +253,29 @@ async function cancelOrderWithVerification(symbol, orderId) {
 function saveState() {
   if (USE_MOCK) {
     mockExchange.saveState();
+  } else {
+    // Save processed order IDs for real Binance
+    try {
+      fs.writeFileSync(STATE_FILE, JSON.stringify({
+        processedOrderIds: Array.from(processedOrderIds)
+      }, null, 2));
+      
+      // Also persist strategies (includes grid steps) to prevent data loss on crash
+      const db = require('./trading-db');
+      const strategies = db.getAllStrategies();
+      const strategiesFile = path.join(__dirname, '..', '..', 'data-prod', 'strategies.json');
+      fs.writeFileSync(strategiesFile, JSON.stringify(strategies, null, 2));
+      
+      // Persist completed trades
+      const tradesFile = path.join(__dirname, '..', '..', 'data-prod', 'completed-trades.json');
+      const trades = db.getAllCompletedTrades();
+      fs.writeFileSync(tradesFile, JSON.stringify(trades, null, 2));
+      
+      console.log('[Trading] State persisted to data-prod/');
+    } catch (e) {
+      console.error('[Trading] Failed to persist state:', e.message);
+    }
   }
-  // No saving needed for real Binance
 }
 
 function getState() {
@@ -197,7 +286,8 @@ function getState() {
   return {
     prices: priceCache,
     orders: [],
-    enabled: !USE_MOCK
+    enabled: !USE_MOCK,
+    processedOrderIds: Array.from(processedOrderIds)
   };
 }
 
@@ -226,5 +316,7 @@ module.exports = {
   cancelOrder,
   cancelOrderWithVerification,
   saveState,
-  getState
+  getState,
+  isOrderProcessed,
+  markOrderProcessed
 };
