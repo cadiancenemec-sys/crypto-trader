@@ -458,6 +458,60 @@
           if (sidebarTitle) sidebarTitle.textContent = 'Environment';
           const mockPanel = document.querySelector('.mock-panel');
           if (mockPanel) {
+            // Fetch and display account balances in production
+            let balanceHtml = '';
+            let totalUsdValue = 0;
+            try {
+              // Fetch balances
+              const balanceRes = await fetch('/api/dca/binance/account');
+              const balanceData = await balanceRes.json();
+              
+              // Fetch current prices
+              const pricesRes = await fetch('/api/dca/prices');
+              const pricesData = await pricesRes.json();
+              
+              if (balanceData.balances) {
+                const usd = balanceData.balances.find(b => b.asset === 'USD');
+                const eth = balanceData.balances.find(b => b.asset === 'ETH');
+                const usdt = balanceData.balances.find(b => b.asset === 'USDT');
+                const btc = balanceData.balances.find(b => b.asset === 'BTC');
+                const ltc = balanceData.balances.find(b => b.asset === 'LTC');
+                
+                const unassignedCash = usd ? usd.free : 0;
+                totalUsdValue += unassignedCash;
+                
+                // Calculate crypto values in USD
+                const ethPrice = pricesData.prices?.['ETHUSD'] || 0;
+                const btcPrice = pricesData.prices?.['BTCUSD'] || 0;
+                const ltcPrice = pricesData.prices?.['LTCUSD'] || 0;
+                
+                const ethValue = eth ? eth.total * ethPrice : 0;
+                const btcValue = btc ? btc.total * btcPrice : 0;
+                const ltcValue = ltc ? ltc.total * ltcPrice : 0;
+                const usdtValue = usdt ? usdt.total : 0;
+                
+                totalUsdValue += ethValue + btcValue + ltcValue + usdtValue;
+                
+                balanceHtml = `
+                  <div style="margin-top:15px;padding-top:15px;border-top:1px solid #444;">
+                    <div style="color:#4ade80;font-weight:bold;margin-bottom:8px;">💰 Account Balances</div>
+                    <div style="text-align:left;font-size:0.85em;line-height:1.6;">
+                      <div><span style="color:#888;">Unassigned Cash:</span> <span style="color:#fff;">$${unassignedCash.toFixed(2)}</span></div>
+                      ${eth ? `<div><span style="color:#888;">ETH:</span> <span style="color:#fff;">${eth.total.toFixed(6)}</span> ${eth.locked > 0 ? `<span style="color:#f59e0b;">(${eth.locked.toFixed(4)} locked)</span>` : ''} <span style="color:#666;">≈$${ethValue.toFixed(2)}</span></div>` : ''}
+                      ${btc ? `<div><span style="color:#888;">BTC:</span> <span style="color:#fff;">${btc.total.toFixed(6)}</span> ${btc.locked > 0 ? `<span style="color:#f59e0b;">(${btc.locked.toFixed(4)} locked)</span>` : ''} <span style="color:#666;">≈$${btcValue.toFixed(2)}</span></div>` : ''}
+                      ${ltc ? `<div><span style="color:#888;">LTC:</span> <span style="color:#fff;">${ltc.total.toFixed(6)}</span> ${ltc.locked > 0 ? `<span style="color:#f59e0b;">(${ltc.locked.toFixed(4)} locked)</span>` : ''} <span style="color:#666;">≈$${ltcValue.toFixed(2)}</span></div>` : ''}
+                      ${usdt && usdt.total > 0 ? `<div><span style="color:#888;">USDT:</span> <span style="color:#fff;">${usdt.total.toFixed(2)}</span></div>` : ''}
+                    </div>
+                    <div style="margin-top:12px;padding-top:12px;border-top:1px solid #444;">
+                      <div><span style="color:#4ade80;font-weight:bold;">Total Value:</span> <span style="color:#4ade80;font-weight:bold;font-size:1.1em;">$${totalUsdValue.toFixed(2)}</span></div>
+                    </div>
+                  </div>
+                `;
+              }
+            } catch (e) {
+              console.error('Failed to fetch account balances:', e);
+            }
+            
             mockPanel.innerHTML = `
               <div style="text-align:center;padding:20px;">
                 <div style="font-size:4em;margin-bottom:10px;">🔴</div>
@@ -467,6 +521,7 @@
                   Real orders will be placed!<br>
                   Use with caution
                 </div>
+                ${balanceHtml}
               </div>
             `;
           }

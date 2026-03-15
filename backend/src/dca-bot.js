@@ -28,6 +28,112 @@ function start(intervalMs = 5000) {
   isRunning = true;
   tickInterval = setInterval(tick, intervalMs);
   console.log(`[DCA Bot] Started (tick every ${intervalMs}ms)`);
+  
+  // Start safety check interval - scans every 10 seconds for missing orders
+  setInterval(checkMissingOrders, 10000);
+  console.log('[DCA Bot] Safety check started (every 10s)');
+}
+
+// Safety check: verify all filled buys have their sell orders placed on Binance
+async function checkMissingOrders() {
+  if (!isRunning) return;
+  
+  const strategies = tradingDb.getActiveStrategies();
+  
+  for (const strategy of strategies) {
+    try {
+      const gridSteps = strategy.gridSteps || [];
+      const symbol = strategy.symbol;
+      
+      // Get all orders from Binance
+      const allOrders = await trading.getAllOrders(symbol);
+      if (!Array.isArray(allOrders)) continue;
+      
+      // Check each grid step
+      for (const step of gridSteps) {
+        // Look for steps that are filled (buy completed) but missing sell order
+        if (step.status === 'filled' || (step.status === 'open_buy' && step.filledAt && !step.sellOrderId)) {
+          // Check if we have a real orderId for the buy
+          const buyOrderId = step.orderId || step.buyOrderId;
+          if (!buyOrderId) continue;
+          
+          // Find this order on Binance to see its actual status
+          const binanceOrder = allOrders.find(o => o.orderId == buyOrderId);
+          
+          if (binanceOrder && binanceOrder.status === 'FILLED' && !step.sellOrderId) {
+            // Buy is filled but no sell order exists! Create it now.
+            console.log(`[DCA Safety] Buy order ${buyOrderId} filled but no sell found! Creating sell now...`);
+            
+            const sellPrice = binanceOrder.price * (1 + strategy.profitTarget / 100);
+            const mockOrder = await trading.placeOrder(
+              symbol,
+              'SELL',
+              binanceOrder.origQty || binanceOrder.quantity,
+              sellPrice
+            );
+            
+            // Verify it was placed
+            await new Promise(resolve => setTimeout(resolve, 500));
+            const verifyOrders = await trading.getAllOrders(symbol);
+            const verified = verifyOrders.find(o => o.orderId === mockOrder.orderId);
+            
+            if (verified) {
+              tradingDb.updateGridStep(strategy.id, step.level, {
+                status: 'pending_sell',
+                sellOrderId: mockOrder.orderId
+              });
+              console.log(`[DCA Safety] ✓ Created missing sell order ${mockOrder.orderId} @ ${sellPrice}`);
+            } else {
+              console.error(`[DCA Safety] ✗ Failed to verify sell order on Binance`);
+            }
+          }
+        }
+        
+        // Also check for filled sells that are still marked as pending_sell (verify completion)
+        if (step.status === 'pending_sell' && step.sellOrderId) {
+          const sellOrder = allOrders.find(o => o.orderId == step.sellOrderId);
+          if (sellOrder && sellOrder.status === 'FILLED') {
+            // Sell completed - update to completed
+            tradingDb.updateGridStep(strategy.id, step.level, {
+              status: 'completed',
+              completedAt: new Date().toISOString()
+            });
+            console.log(`[DCA Safety] Sell order ${step.sellOrderId} confirmed filled, marking completed`);
+            
+            // Record the trade
+            const filledBuy = allOrders.find(o => o.side === 'BUY' && o.status === 'FILLED' && Math.abs(parseFloat(o.price) - (sellOrder.price / (1 + strategy.profitTarget / 100))) < 1);
+            const buyPrice = filledBuy ? parseFloat(filledBuy.price) : 0;
+            const profit = (sellOrder.price - buyPrice) * (sellOrder.origQty || sellOrder.quantity);
+            
+            tradingDb.addCompletedTrade({
+              strategyId: strategy.id,
+              symbol: strategy.symbol,
+              buyPrice,
+              sellPrice: sellOrder.price,
+              quantity: sellOrder.origQty || sellOrder.quantity,
+              profit,
+              profitPercent: strategy.profitTarget,
+              fees: 0
+            });
+            
+            // Reset to available for reuse
+            setTimeout(() => {
+              tradingDb.updateGridStep(strategy.id, step.level, {
+                status: 'available',
+                orderId: null,
+                buyOrderId: null,
+                sellOrderId: null,
+                filledAt: null,
+                completedAt: null
+              });
+            }, 100);
+          }
+        }
+      }
+    } catch (e) {
+      console.error(`[DCA Safety] Error checking strategy ${strategy.id}:`, e.message);
+    }
+  }
 }
 
 // Stop the bot
@@ -48,15 +154,36 @@ async function tick() {
   
   for (const strategy of strategies) {
     try {
-      // Check if autoEnd is enabled and no trades are pending
+      // Check if autoEnd is enabled and cancel only BUY orders (let sells complete)
       if (strategy.autoEnd) {
         const gridSteps = strategy.gridSteps || [];
         const openBuys = gridSteps.filter(s => s.status === 'open_buy');
         const pendingSells = gridSteps.filter(s => s.status === 'pending_sell');
         
+        // If autoEnd is on, cancel only BUY orders - let sells finish!
+        if (openBuys.length > 0) {
+          console.log(`[DCA Bot] Auto-end enabled for strategy ${strategy.id}, cancelling ${openBuys.length} buy orders (letting ${pendingSells.length} sells complete)`);
+          
+          // Cancel only open buys
+          for (const step of openBuys) {
+            if (step.orderId || step.buyOrderId) {
+              const orderId = step.orderId || step.buyOrderId;
+              await trading.cancelOrder(strategy.symbol, orderId);
+              tradingDb.updateGridStep(strategy.id, step.level, {
+                status: 'available',
+                orderId: null,
+                buyOrderId: null
+              });
+            }
+          }
+          
+          console.log(`[DCA Bot] Cancelled buy orders for strategy ${strategy.id}, sells will complete`);
+        }
+        
+        // Now check if there are no more pending trades
         if (openBuys.length === 0 && pendingSells.length === 0) {
           tradingDb.updateStrategy(strategy.id, { status: 'completed' });
-          console.log(`[DCA Bot] Strategy ${strategy.id} marked as completed (auto-end, no pending trades)`);
+          console.log(`[DCA Bot] Strategy ${strategy.id} marked as completed (auto-end)`);
           continue; // Skip processing this strategy
         }
       }
@@ -74,7 +201,15 @@ async function processStrategy(strategy) {
   const currentPrice = await trading.getPrice(symbol);
   
   // Get all orders for this strategy's symbol (including filled)
-  const allOrders = trading.getAllOrders(symbol);
+  let allOrders = await trading.getAllOrders(symbol);
+  console.log(`[DCA Bot] getAllOrders returned:`, typeof allOrders, Array.isArray(allOrders) ? 'IS array' : 'not array');
+  
+  // Force convert to real array
+  if (!Array.isArray(allOrders)) {
+    allOrders = Array.from(allOrders);
+    console.log(`[DCA Bot] Forced convert to array, length:`, allOrders.length);
+  }
+  
   const buyOrders = allOrders.filter(o => o.side === 'BUY');
   const sellOrders = allOrders.filter(o => o.side === 'SELL');
   const openOrders = allOrders.filter(o => o.status === 'NEW');
@@ -85,8 +220,15 @@ async function processStrategy(strategy) {
   // 2. Re-fetch strategy to get updated budget after fills
   const updatedStrategy = tradingDb.getStrategy(strategy.id);
   
+  // Skip placing new buy orders if autoEnd is enabled - let existing sells complete
+  if (updatedStrategy.autoEnd) {
+    console.log(`[DCA Bot] Auto-end enabled for strategy ${strategy.id}, skipping new buy orders`);
+    broadcastStrategyUpdate(strategy);
+    return;
+  }
+  
   // 3. Re-fetch open orders after processing fills
-  const currentOrders = trading.getAllOrders(symbol);
+  const currentOrders = await trading.getAllOrders(symbol);
   const openBuyOrders = currentOrders.filter(o => o.side === 'BUY' && o.status === 'NEW');
   
   // Place more buys if we can afford them (based on available cash, regardless of pending sells)
@@ -108,6 +250,13 @@ async function processFills(strategy, buyOrders, sellOrders) {
   // Check for filled buy orders -> create sell
   for (const order of buyOrders) {
     if (order.status === 'FILLED' && !order.processed) {
+      // Skip if order is missing quantity (corrupted data)
+      if (!order.quantity || !order.price) {
+        console.log(`[DCA Bot] Skipping corrupted order (missing quantity or price)`);
+        order.processed = true;
+        continue;
+      }
+      
       // Get fresh strategy data for profit target and budget
       const freshStrategy = tradingDb.getStrategy(strategy.id);
       
@@ -158,7 +307,10 @@ async function processFills(strategy, buyOrders, sellOrders) {
       const freshStrategy = tradingDb.getStrategy(strategy.id);
       
       // Find the original buy price (find the most recent processed buy order)
-      const allOrders = trading.getAllOrders(strategy.symbol);
+      let allOrders = await trading.getAllOrders(strategy.symbol);
+      if (!Array.isArray(allOrders)) {
+        allOrders = Array.from(allOrders);
+      }
       const filledBuys = allOrders.filter(o => o.side === 'BUY' && o.status === 'FILLED' && o.processed === true);
       const buyOrder = filledBuys[filledBuys.length - 1];
       
@@ -258,7 +410,7 @@ async function placeBuyOrders(strategy, currentPrice, existingBuyOrders) {
   const amount = strategy.tradeAmount;
   
   // Get all orders to calculate what's committed
-  const allOrders = trading.getAllOrders(symbol);
+  const allOrders = await trading.getAllOrders(symbol);
   
   // Calculate cost of already-open (NEW) buy orders
   const openBuyCost = allOrders
@@ -339,19 +491,54 @@ async function placeBuyOrders(strategy, currentPrice, existingBuyOrders) {
     }
   }
   
-  // Place the orders and update grid steps
+  // Place orders ONE AT A TIME and verify each one before placing next
+  // This prevents duplicate orders if something goes wrong
   for (const { level, price } of ordersToPlace) {
-    const order = await trading.placeOrder(symbol, 'BUY', amount, price);
-    console.log(`[DCA Bot] Placed buy order: ${amount} ${symbol} @ $${price} (level ${level})`);
+    // First, verify this level doesn't already have an open order on Binance
+    const currentOpenOrders = await trading.getAllOrders(symbol);
+    const existingAtLevel = currentOpenOrders.filter(o => 
+      o.side === 'BUY' && o.status === 'NEW' && Math.abs(parseFloat(o.price) - price) < 1
+    );
     
-    // Update grid step to track this order
-    tradingDb.updateGridStep(strategy.id, level, {
-      status: 'open_buy',
-      orderId: order.orderId,
-      buyOrderId: order.orderId
-    });
+    if (existingAtLevel.length > 0) {
+      console.log(`[DCA Bot] Level ${level} already has order on Binance (${existingAtLevel[0].orderId}), skipping`);
+      // Sync with what's actually on Binance
+      tradingDb.updateGridStep(strategy.id, level, {
+        status: 'open_buy',
+        orderId: existingAtLevel[0].orderId,
+        buyOrderId: existingAtLevel[0].orderId
+      });
+      continue;
+    }
+    
+    // Place the order
+    const order = await trading.placeOrder(symbol, 'BUY', amount, price);
+    console.log(`[DCA Bot] Placed buy order: ${amount} ${symbol} @ $${price} (level ${level}), orderId: ${order.orderId}`);
+    
+    // CRITICAL: Verify order actually exists on Binance before continuing
+    await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause
+    
+    // Re-fetch to verify
+    const verifyOrders = await trading.getAllOrders(symbol);
+    const verified = verifyOrders.find(o => o.orderId === order.orderId);
+    
+    if (verified) {
+      console.log(`[DCA Bot] ✓ Verified order ${order.orderId} on Binance`);
+      tradingDb.updateGridStep(strategy.id, level, {
+        status: 'open_buy',
+        orderId: order.orderId,
+        buyOrderId: order.orderId
+      });
+    } else {
+      console.error(`[DCA Bot] ✗ Failed to verify order ${order.orderId} on Binance!`);
+      // Mark as available so it can be retried on next tick
+      continue;
+    }
     
     broadcastOrder(order);
+    
+    // Wait between orders to avoid rate limiting and ensure proper tracking
+    await new Promise(resolve => setTimeout(resolve, 300));
   }
 }
 
@@ -382,9 +569,9 @@ function broadcastToAll(data) {
   });
 }
 
-function broadcastStrategyUpdate(strategy) {
+async function broadcastStrategyUpdate(strategy) {
   const stats = tradingDb.getStrategyStats(strategy.id);
-  const openOrders = trading.getOpenOrders(strategy.symbol);
+  const openOrders = await trading.getOpenOrders(strategy.symbol);
   const trades = tradingDb.getAllCompletedTrades(strategy.id).slice(-5);
   
   broadcastToAll({
@@ -409,8 +596,7 @@ function broadcastOrder(order) {
 function getStatus() {
   return {
     running: isRunning,
-    activeStrategies: tradingDb.getActiveStrategies().length,
-    openOrders: trading.getOpenOrders().length
+    activeStrategies: tradingDb.getActiveStrategies().length
   };
 }
 

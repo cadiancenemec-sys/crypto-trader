@@ -149,9 +149,12 @@ router.put('/strategies/:id', async (req, res) => {
     if (currentStrategy.gridSteps) {
       for (const step of currentStrategy.gridSteps) {
         if (step.status === 'open_buy' && step.orderId) {
-          // Cancel the order in mock exchange
-          if (trading.USE_MOCK && mockExchange) {
-            mockExchange.cancelOrder(currentStrategy.symbol, step.orderId);
+          // Cancel the order (mock or real)
+          try {
+            await trading.cancelOrder(currentStrategy.symbol, step.orderId);
+            console.log(`[DCA Bot] Cancelled order ${step.orderId} on ${currentStrategy.symbol}`);
+          } catch (e) {
+            console.error(`[DCA Bot] Failed to cancel order ${step.orderId}:`, e.message);
           }
           // Reset grid step to available
           tradingDb.updateGridStep(strategyId, step.level, {
@@ -460,4 +463,118 @@ router.get('/account', async (req, res) => {
   }
 });
 
+// Cancel a specific order by ID
+router.delete('/orders/:orderId', async (req, res) => {
+  const { orderId } = req.params;
+  const { symbol } = req.query;
+  
+  if (!symbol) {
+    return res.status(400).json({ error: 'Symbol is required' });
+  }
+  
+  try {
+    const result = await trading.cancelOrder(symbol, orderId);
+    res.json({ success: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
+// Check for filled orders and process them (manual endpoint)
+router.post('/strategies/:id/check-fills', async (req, res) => {
+  const strategyId = parseInt(req.params.id);
+  const strategy = tradingDb.getStrategy(strategyId);
+  
+  if (!strategy) {
+    return res.status(404).json({ error: 'Strategy not found' });
+  }
+  
+  const results = [];
+  
+  // Check each open_buy order
+  for (const step of strategy.gridSteps) {
+    if (step.status === 'open_buy' && step.orderId) {
+      try {
+        const orderStatus = await trading.getOrder(strategy.symbol, step.orderId);
+        
+        if (orderStatus.status === 'FILLED') {
+          // Order was filled! Update grid step and create sell
+          tradingDb.updateGridStep(strategyId, step.level, {
+            status: 'filled',
+            filledAt: new Date(parseFloat(orderStatus.updateTime) * 1000).toISOString()
+          });
+          
+          // Now create a sell order at the next price level
+          const nextLevel = step.level + 1;
+          if (nextLevel < strategy.gridLevels) {
+            const sellPrice = strategy.startPrice - (step.level * strategy.gridSpacing) - strategy.gridSpacing;
+            // Actually the sell should be at the current level + gridSpacing above
+            const actualSellPrice = step.price + strategy.gridSpacing;
+            
+            try {
+              const sellOrder = await trading.placeOrder(strategy.symbol, 'SELL', strategy.tradeAmount, actualSellPrice);
+              
+              tradingDb.updateGridStep(strategyId, step.level, {
+                status: 'pending_sell',
+                sellOrderId: sellOrder.orderId,
+                completedAt: new Date().toISOString()
+              });
+              
+              results.push({ level: step.level, action: 'buy_filled_sell_created', sellOrderId: sellOrder.orderId });
+            } catch (e) {
+              results.push({ level: step.level, action: 'buy_filled_sell_failed', error: e.message });
+            }
+          } else {
+            // No more levels, mark as completed
+            tradingDb.updateGridStep(strategyId, step.level, {
+              status: 'completed',
+              completedAt: new Date().toISOString()
+            });
+            results.push({ level: step.level, action: 'buy_filled_completed' });
+          }
+        }
+      } catch (e) {
+        results.push({ level: step.level, action: 'check_failed', error: e.message });
+      }
+    }
+  }
+  
+  res.json({ strategyId, results });
+});
+
+// Get open orders from Binance
+router.get("/binance/open-orders", async (req, res) => {
+  const { symbol } = req.query;
+  
+  try {
+    const orders = await trading.getOpenOrders(symbol || "ETHUSD");
+    res.json(orders);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Get production account balance from Binance
+router.get('/binance/account', async (req, res) => {
+  if (trading.USE_MOCK) {
+    return res.json({ error: 'Not available in mock mode' });
+  }
+  
+  try {
+    const account = await binance.trading.getAccount();
+    const balances = account.balances
+      .filter(b => parseFloat(b.free) > 0 || parseFloat(b.locked) > 0)
+      .map(b => ({
+        asset: b.asset,
+        free: parseFloat(b.free),
+        locked: parseFloat(b.locked),
+        total: parseFloat(b.free) + parseFloat(b.locked)
+      }));
+    
+    res.json({ balances });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
