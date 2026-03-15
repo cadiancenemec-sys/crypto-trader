@@ -80,6 +80,7 @@ async function checkMissingOrders() {
             if (verified) {
               tradingDb.updateGridStep(strategy.id, step.level, {
                 status: 'pending_sell',
+                orderId: mockOrder.orderId,
                 sellOrderId: mockOrder.orderId
               });
               console.log(`[DCA Safety] ✓ Created missing sell order ${mockOrder.orderId} @ ${sellPrice}`);
@@ -428,6 +429,7 @@ async function processFills(strategy, buyOrders, sellOrders) {
       if (gridStep) {
         tradingDb.updateGridStep(strategy.id, gridStep.level, {
           status: 'pending_sell',
+          orderId: mockOrder.orderId,
           sellOrderId: mockOrder.orderId,
           filledAt: new Date().toISOString()
         });
@@ -436,6 +438,7 @@ async function processFills(strategy, buyOrders, sellOrders) {
         const level = Math.round((freshStrategy.startPrice - order.price) / freshStrategy.gridSpacing);
         tradingDb.updateGridStep(strategy.id, level, {
           status: 'pending_sell',
+          orderId: mockOrder.orderId,
           sellOrderId: mockOrder.orderId,
           filledAt: new Date().toISOString()
         });

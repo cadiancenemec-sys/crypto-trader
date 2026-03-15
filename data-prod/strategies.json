@@ -277,7 +277,7 @@
     "symbol": "ETHUSD",
     "tradeAmount": 0.003,
     "totalBudget": 50,
-    "usableBudget": 12.029000000000003,
+    "usableBudget": 50,
     "profitTarget": 0.5,
     "gridLevels": 7,
     "gridSpacing": 3,
@@ -289,7 +289,7 @@
     "emergencyDropMaxOrders": 0,
     "emergencyDropActive": false,
     "createdAt": "2026-03-15T12:02:19.554Z",
-    "updatedAt": "2026-03-15T13:45:57.220Z",
+    "updatedAt": "2026-03-15T14:03:24.909Z",
     "gridSteps": [
       {
         "level": 0,
@@ -297,7 +297,7 @@
         "status": "pending_sell",
         "orderId": 1766123954,
         "buyOrderId": 1766123954,
-        "filledAt": "2026-03-15T13:45:57.218Z",
+        "filledAt": "2026-03-15T13:56:01.378Z",
         "completedAt": null
       },
       {
@@ -306,7 +306,7 @@
         "status": "pending_sell",
         "orderId": 1766123962,
         "buyOrderId": 1766123962,
-        "filledAt": "2026-03-15T13:45:57.218Z",
+        "filledAt": "2026-03-15T13:56:01.379Z",
         "completedAt": null
       },
       {
@@ -315,7 +315,7 @@
         "status": "pending_sell",
         "orderId": 1766123976,
         "buyOrderId": 1766123976,
-        "filledAt": "2026-03-15T13:45:57.219Z",
+        "filledAt": "2026-03-15T13:56:01.380Z",
         "completedAt": null
       },
       {
@@ -324,7 +324,7 @@
         "status": "pending_sell",
         "orderId": 1766123979,
         "buyOrderId": 1766123979,
-        "filledAt": "2026-03-15T13:45:57.219Z",
+        "filledAt": "2026-03-15T13:56:01.380Z",
         "completedAt": null
       },
       {
@@ -333,7 +333,7 @@
         "status": "pending_sell",
         "orderId": 1766123995,
         "buyOrderId": 1766123995,
-        "filledAt": "2026-03-15T13:45:57.219Z",
+        "filledAt": "2026-03-15T13:56:01.380Z",
         "completedAt": null
       },
       {
@@ -342,7 +342,7 @@
         "status": "pending_sell",
         "orderId": 1766124012,
         "buyOrderId": 1766124012,
-        "filledAt": "2026-03-15T13:45:57.220Z",
+        "filledAt": "2026-03-15T13:56:01.381Z",
         "completedAt": null
       },
       {
@@ -351,7 +351,7 @@
         "status": "pending_sell",
         "orderId": 1766124013,
         "buyOrderId": 1766124013,
-        "filledAt": "2026-03-15T13:45:57.220Z",
+        "filledAt": "2026-03-15T13:56:01.381Z",
         "completedAt": null
       }
     ]
