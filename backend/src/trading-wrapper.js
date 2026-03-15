@@ -56,24 +56,50 @@ async function getAllPrices() {
   return prices;
 }
 
-function getAllOrders(symbol) {
+// Get all orders for a symbol (sync for mock, async for real)
+async function getAllOrders(symbol) {
   if (USE_MOCK) {
     return mockExchange.getAllOrders(symbol);
   }
   
-  // Real Binance - would need to fetch from API
-  // For now, return empty in prod until we fully implement
-  console.log(`[Trading] Real order fetching not yet implemented for ${symbol}`);
-  return [];
+  // Real Binance - fetch all orders
+  try {
+    const result = await binance.trading.getAllOrders(symbol);
+    // Make sure we return an array - handle any response format
+    if (!result) {
+      return [];
+    }
+    if (Array.isArray(result)) {
+      return result;
+    }
+    // If it's an object with orders/data property, extract it
+    if (typeof result === 'object') {
+      if (Array.isArray(result.data)) return result.data;
+      if (Array.isArray(result.orders)) return result.orders;
+      if (Array.isArray(result.result)) return result.result;
+    }
+    console.log(`[Trading] getAllOrders unexpected response type:`, typeof result);
+    return [];
+  } catch (e) {
+    console.error(`[Trading] Failed to fetch orders:`, e.message);
+    return [];
+  }
 }
 
-function getOpenOrders(symbol) {
+// Get open orders for a symbol
+async function getOpenOrders(symbol) {
   if (USE_MOCK) {
     return mockExchange.getOpenOrders(symbol);
   }
   
-  // Real Binance
-  return []; // TODO: implement
+  // Real Binance - fetch open orders
+  try {
+    const orders = await binance.trading.getAllOrders(symbol);
+    return orders.filter(o => o.status === 'NEW');
+  } catch (e) {
+    console.error(`[Trading] Failed to fetch open orders:`, e.message);
+    return [];
+  }
 }
 
 async function placeOrder(symbol, side, quantity, price) {
@@ -132,12 +158,27 @@ function getState() {
   };
 }
 
+// Get order status from exchange
+async function getOrder(symbol, orderId) {
+  if (USE_MOCK) {
+    return mockExchange.getOrder(symbol, orderId);
+  }
+  
+  try {
+    return await binance.trading.getOrder(symbol, orderId);
+  } catch (e) {
+    console.error(`[Trading] Failed to get order:`, e.message);
+    throw e;
+  }
+}
+
 module.exports = {
   USE_MOCK,
   getPrice,
   getAllPrices,
   getAllOrders,
   getOpenOrders,
+  getOrder,
   placeOrder,
   cancelOrder,
   saveState,
