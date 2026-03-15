@@ -106,7 +106,7 @@ router.get('/strategies/:id', (req, res) => {
 
 // Create strategy
 router.post('/strategies', (req, res) => {
-  const { symbol, tradeAmount, totalBudget, profitTarget, gridLevels, gridSpacing, startPrice, autoEnd, emergencyDropEnabled, emergencyDropPercent, emergencyDropMaxOrders } = req.body;
+  const { symbol, strategyType, tradeAmount, totalBudget, profitTarget, gridLevels, gridSpacing, startPrice, autoEnd, emergencyDropEnabled, emergencyDropPercent, emergencyDropMaxOrders } = req.body;
   
   if (!symbol || !tradeAmount || !totalBudget || !profitTarget) {
     return res.status(400).json({ error: 'Missing required fields' });
@@ -114,6 +114,7 @@ router.post('/strategies', (req, res) => {
   
   const strategy = tradingDb.createStrategy({
     symbol,
+    strategyType,
     tradeAmount,
     totalBudget,
     profitTarget,

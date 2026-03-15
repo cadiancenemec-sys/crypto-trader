@@ -229,11 +229,15 @@ async function processStrategy(strategy) {
   
   // 3. Re-fetch open orders after processing fills
   const currentOrders = await trading.getAllOrders(symbol);
-  const openBuyOrders = currentOrders.filter(o => o.side === 'BUY' && o.status === 'NEW');
   
-  // Place more buys if we can afford them (based on available cash, regardless of pending sells)
-  if (openBuyOrders.length < updatedStrategy.gridLevels) {
-    await placeBuyOrders(updatedStrategy, currentPrice, openBuyOrders);
+  // For reverse mode (sell_buy), check for open SELL orders; for normal mode, check for BUY orders
+  const isReverse = (strategy.strategyType || 'buy_sell') === 'sell_buy';
+  const targetSide = isReverse ? 'SELL' : 'BUY';
+  const openTargetOrders = currentOrders.filter(o => o.side === targetSide && o.status === 'NEW');
+  
+  // Place more orders if we have fewer than grid levels
+  if (openTargetOrders.length < updatedStrategy.gridLevels) {
+    await placeBuyOrders(updatedStrategy, currentPrice, openTargetOrders);
   }
   
   // 3. Check emergency drop protection
@@ -247,6 +251,126 @@ async function processStrategy(strategy) {
 
 // Process filled orders
 async function processFills(strategy, buyOrders, sellOrders) {
+  const isReverse = (strategy.strategyType || 'buy_sell') === 'sell_buy';
+  
+  if (isReverse) {
+    // REVERSE MODE: Sell first, then buy back (take profit in cash)
+    // Check for filled SELL orders -> create BUY (take profit)
+    for (const order of sellOrders) {
+      if (order.status === 'FILLED' && !order.processed) {
+        if (!order.quantity || !order.price) {
+          console.log(`[DCA Bot] Skipping corrupted order`);
+          order.processed = true;
+          continue;
+        }
+        
+        const freshStrategy = tradingDb.getStrategy(strategy.id);
+        
+        // Track cash from sell - this is what we'll use to buy back
+        // and keep the difference as profit
+        const sellProceeds = order.price * order.quantity;
+        
+        // Update strategy with sell proceeds (cash available to buy back)
+        const currentCash = freshStrategy.usableBudget || 0;
+        const newCash = currentCash + sellProceeds;
+        tradingDb.updateStrategy(strategy.id, { usableBudget: newCash });
+        
+        // Buy at LOWER price - but only enough to get back original quantity
+        // The profit stays as cash
+        const originalQty = order.quantity;
+        const buyPrice = order.price * (1 - freshStrategy.profitTarget / 100);
+        const costToBuyBack = buyPrice * originalQty;
+        
+        const mockOrder = trading.placeOrder(
+          strategy.symbol,
+          'BUY',
+          originalQty,
+          buyPrice
+        );
+        
+        // Calculate expected profit (will be realized when buy fills)
+        const expectedProfit = sellProceeds - costToBuyBack;
+        
+        // Find and update the grid step
+        const gridStep = freshStrategy.gridSteps?.find(s => s.sellOrderId === order.orderId);
+        if (gridStep) {
+          tradingDb.updateGridStep(strategy.id, gridStep.level, {
+            status: 'pending_buy',
+            buyOrderId: mockOrder.orderId,
+            filledAt: new Date().toISOString(),
+            sellProceeds: sellProceeds,
+            expectedProfit: expectedProfit
+          });
+        }
+        
+        order.processed = true;
+        trading.saveState();
+        console.log(`[DCA Bot] Reverse: Sell filled @ ${order.price} ($${sellProceeds.toFixed(2)}), cash: $${newCash.toFixed(2)}, placing buy @ $${buyPrice.toFixed(2)}`);
+        broadcastOrder(mockOrder);
+      }
+    }
+    
+    // Check for filled BUY orders (in reverse mode this completes the cycle)
+    for (const order of buyOrders) {
+      if (order.status === 'FILLED' && !order.processed) {
+        const freshStrategy = tradingDb.getStrategy(strategy.id);
+        
+        // Get the sell proceeds from the grid step
+        const gridStep = freshStrategy.gridSteps?.find(s => s.buyOrderId === order.orderId);
+        const sellProceeds = gridStep?.sellProceeds || (order.price * order.quantity * (1 + freshStrategy.profitTarget / 100));
+        const costToBuyBack = order.price * order.quantity;
+        
+        // Profit = what we sold at - what we bought back at
+        const profit = sellProceeds - costToBuyBack;
+        
+        // Deduct the buy cost from usable budget (cash spent)
+        const currentCash = freshStrategy.usableBudget || 0;
+        const newCash = currentCash - costToBuyBack;
+        tradingDb.updateStrategy(strategy.id, { usableBudget: Math.max(0, newCash) });
+        
+        console.log(`[DCA Bot] Reverse: Buy filled @ ${order.price} ($${costToBuyBack.toFixed(2)}), profit: $${profit.toFixed(2)} (cash), remaining cash: $${newCash.toFixed(2)}`);
+        
+        // Find and mark grid step as completed
+        if (gridStep) {
+          tradingDb.updateGridStep(strategy.id, gridStep.level, {
+            status: 'completed',
+            completedAt: new Date().toISOString()
+          });
+          
+          // Record the trade
+          tradingDb.addCompletedTrade({
+            strategyId: strategy.id,
+            symbol: strategy.symbol,
+            buyPrice: order.price,
+            sellPrice: sellProceeds / order.quantity,
+            quantity: order.quantity,
+            profit: profit,
+            profitPercent: freshStrategy.profitTarget,
+            fees: 0
+          });
+          
+          // Reset to available so it can be reused (place new sell order)
+          setTimeout(() => {
+            tradingDb.updateGridStep(strategy.id, gridStep.level, {
+              status: 'available_sell',
+              orderId: null,
+              sellOrderId: null,
+              buyOrderId: null,
+              filledAt: null,
+              completedAt: null,
+              sellProceeds: null,
+              expectedProfit: null
+            });
+          }, 100);
+        }
+        
+        order.processed = true;
+        trading.saveState();
+      }
+    }
+  } else {
+    // NORMAL MODE: Buy first, then sell
+    
   // Check for filled buy orders -> create sell
   for (const order of buyOrders) {
     if (order.status === 'FILLED' && !order.processed) {
@@ -394,6 +518,7 @@ async function processFills(strategy, buyOrders, sellOrders) {
       }
     }
   }
+  } // End of normal mode else block
 }
 
 // Place buy orders at grid levels
@@ -454,8 +579,8 @@ async function placeBuyOrders(strategy, currentPrice, existingBuyOrders) {
   const gridSteps = strategy.gridSteps || [];
   
   // Determine which levels are "busy" (not available)
-  // A level is busy if it has an open buy, or a filled buy awaiting sell, or a pending sell
-  // BUT: if status is "open_buy" with no orderId, it means order was never actually placed - treat as available
+  // A level is busy if it has an open buy/sell, or a filled buy awaiting sell, or a pending sell/buy
+  // BUT: if status is "open_buy" or "open_sell" with no orderId, it means order was never actually placed - treat as available
   const busyLevels = new Set();
   for (const step of gridSteps) {
     if (step.status === 'open_buy') {
@@ -464,7 +589,11 @@ async function placeBuyOrders(strategy, currentPrice, existingBuyOrders) {
         busyLevels.add(step.level);
       }
       // else: not actually busy, will try to place order
-    } else if (step.status === 'filled_buy' || step.status === 'pending_sell') {
+    } else if (step.status === 'open_sell') {
+      if (step.orderId || step.sellOrderId) {
+        busyLevels.add(step.level);
+      }
+    } else if (step.status === 'filled_buy' || step.status === 'pending_sell' || step.status === 'pending_buy') {
       busyLevels.add(step.level);
     }
   }
@@ -472,17 +601,33 @@ async function placeBuyOrders(strategy, currentPrice, existingBuyOrders) {
   // Place orders at grid levels (startPrice, startPrice - spacing, startPrice - 2*spacing, etc.)
   // But skip any levels that are busy
   const ordersToPlace = [];
+  const strategyType = strategy.strategyType || 'buy_sell';
+  const isReverse = strategyType === 'sell_buy';
+  
+  // For sell_buy mode, grid goes UP from start price (sell high first)
+  // For buy_sell mode, grid goes DOWN from start price (buy low first)
   for (let level = 0; level < levels; level++) {
     // Skip busy levels
     if (busyLevels.has(level)) {
       continue;
     }
     
-    const targetPrice = startPrice - (level * spacing);
+    // Calculate price based on strategy type
+    const targetPrice = isReverse 
+      ? startPrice + (level * spacing)  // sell_buy: prices go UP
+      : startPrice - (level * spacing); // buy_sell: prices go DOWN
     
-    // Only place if price is reasonable (not too far below current)
-    if (targetPrice >= currentPrice * 0.5) {
-      ordersToPlace.push({ level, price: targetPrice });
+    // Only place if price is reasonable
+    if (isReverse) {
+      // For reverse: sell high, so only if price is above current
+      if (targetPrice <= currentPrice * 1.5) {
+        ordersToPlace.push({ level, price: targetPrice });
+      }
+    } else {
+      // For normal: buy low, so only if price is not too far below
+      if (targetPrice >= currentPrice * 0.5) {
+        ordersToPlace.push({ level, price: targetPrice });
+      }
     }
     
     // Stop if we've placed enough
@@ -496,24 +641,33 @@ async function placeBuyOrders(strategy, currentPrice, existingBuyOrders) {
   for (const { level, price } of ordersToPlace) {
     // First, verify this level doesn't already have an open order on Binance
     const currentOpenOrders = await trading.getAllOrders(symbol);
+    const orderSide = isReverse ? 'SELL' : 'BUY';
     const existingAtLevel = currentOpenOrders.filter(o => 
-      o.side === 'BUY' && o.status === 'NEW' && Math.abs(parseFloat(o.price) - price) < 1
+      o.side === orderSide && o.status === 'NEW' && Math.abs(parseFloat(o.price) - price) < 1
     );
     
     if (existingAtLevel.length > 0) {
-      console.log(`[DCA Bot] Level ${level} already has order on Binance (${existingAtLevel[0].orderId}), skipping`);
+      console.log(`[DCA Bot] Level ${level} already has ${orderSide} order on Binance (${existingAtLevel[0].orderId}), skipping`);
       // Sync with what's actually on Binance
-      tradingDb.updateGridStep(strategy.id, level, {
-        status: 'open_buy',
-        orderId: existingAtLevel[0].orderId,
-        buyOrderId: existingAtLevel[0].orderId
-      });
+      if (isReverse) {
+        tradingDb.updateGridStep(strategy.id, level, {
+          status: 'open_sell',
+          orderId: existingAtLevel[0].orderId,
+          sellOrderId: existingAtLevel[0].orderId
+        });
+      } else {
+        tradingDb.updateGridStep(strategy.id, level, {
+          status: 'open_buy',
+          orderId: existingAtLevel[0].orderId,
+          buyOrderId: existingAtLevel[0].orderId
+        });
+      }
       continue;
     }
     
-    // Place the order
-    const order = await trading.placeOrder(symbol, 'BUY', amount, price);
-    console.log(`[DCA Bot] Placed buy order: ${amount} ${symbol} @ $${price} (level ${level}), orderId: ${order.orderId}`);
+    // Place the order - SELL for reverse, BUY for normal
+    const order = await trading.placeOrder(symbol, orderSide, amount, price);
+    console.log(`[DCA Bot] Placed ${orderSide} order: ${amount} ${symbol} @ $${price} (level ${level}), orderId: ${order.orderId}`);
     
     // CRITICAL: Verify order actually exists on Binance before continuing
     await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause
@@ -524,11 +678,19 @@ async function placeBuyOrders(strategy, currentPrice, existingBuyOrders) {
     
     if (verified) {
       console.log(`[DCA Bot] ✓ Verified order ${order.orderId} on Binance`);
-      tradingDb.updateGridStep(strategy.id, level, {
-        status: 'open_buy',
-        orderId: order.orderId,
-        buyOrderId: order.orderId
-      });
+      if (isReverse) {
+        tradingDb.updateGridStep(strategy.id, level, {
+          status: 'open_sell',
+          orderId: order.orderId,
+          sellOrderId: order.orderId
+        });
+      } else {
+        tradingDb.updateGridStep(strategy.id, level, {
+          status: 'open_buy',
+          orderId: order.orderId,
+          buyOrderId: order.orderId
+        });
+      }
     } else {
       console.error(`[DCA Bot] ✗ Failed to verify order ${order.orderId} on Binance!`);
       // Mark as available so it can be retried on next tick

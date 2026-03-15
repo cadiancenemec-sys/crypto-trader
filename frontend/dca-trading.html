@@ -363,6 +363,13 @@
     <div class="modal">
       <h2>Add Trading Strategy</h2>
       <div class="form-group">
+        <label>Strategy Type</label>
+        <select id="newStrategyType">
+          <option value="buy_sell">Buy then Sell (DCA)</option>
+          <option value="sell_buy">Sell then Buy (Reverse DCA)</option>
+        </select>
+      </div>
+      <div class="form-group">
         <label>Symbol</label>
         <select id="newSymbol">
           <option value="ETHUSD">ETH/USD</option>
@@ -883,6 +890,7 @@
     async function createStrategy() {
       const data = {
         symbol: document.getElementById('newSymbol').value,
+        strategyType: document.getElementById('newStrategyType').value,
         tradeAmount: parseFloat(document.getElementById('newTradeAmount').value),
         totalBudget: parseFloat(document.getElementById('newTotalBudget').value),
         profitTarget: parseFloat(document.getElementById('newProfitTarget').value),

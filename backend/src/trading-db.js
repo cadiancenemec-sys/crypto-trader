@@ -18,13 +18,21 @@ if (!fs.existsSync(DATA_DIR)) {
 
 // ===== GRID STEP HELPERS =====
 
-function generateGridSteps(startPrice, levels, spacing) {
+function generateGridSteps(startPrice, levels, spacing, strategyType = 'buy_sell') {
   const steps = [];
   for (let i = 0; i < levels; i++) {
+    // For buy_sell (normal DCA): grid goes DOWN from start price (buy low)
+    // For sell_buy (reverse DCA): grid goes UP from start price (sell high first)
+    const price = strategyType === 'sell_buy' 
+      ? startPrice + (i * spacing) 
+      : startPrice - (i * spacing);
+    
     steps.push({
       level: i,
-      price: startPrice - (i * spacing),
-      status: 'available', // available, open_buy, filled_buy, pending_sell, completed
+      price: price,
+      // For buy_sell: starts with buy orders (open_buy when placed)
+      // For sell_buy: starts with sell orders (open_sell when placed)
+      status: strategyType === 'sell_buy' ? 'available_sell' : 'available',
       orderId: null,
       buyOrderId: null,
       sellOrderId: null,
@@ -96,6 +104,7 @@ function createStrategy(config) {
   const strategy = {
     id: nextStrategyId++,
     symbol: config.symbol,
+    strategyType: config.strategyType || 'buy_sell', // 'buy_sell' or 'sell_buy'
     tradeAmount: config.tradeAmount,
     totalBudget: config.totalBudget,
     usableBudget: config.totalBudget, // Track available budget for buys
@@ -112,7 +121,7 @@ function createStrategy(config) {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     // Grid level tracking - pre-populate all levels
-    gridSteps: generateGridSteps(config.startPrice, config.gridLevels, config.gridSpacing)
+    gridSteps: generateGridSteps(config.startPrice, config.gridLevels, config.gridSpacing, config.strategyType || 'buy_sell')
   };
   
   strategies.push(strategy);
