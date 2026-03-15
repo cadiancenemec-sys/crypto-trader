@@ -1,6 +1,6 @@
 #!/bin/bash
 # Production environment startup script
-# Runs on port 3004 with clean/empty database
+# Runs on port 3004 with existing data
 
 cd "$(dirname "$0")/backend/src"
 
@@ -9,13 +9,14 @@ export DB_PATH='../../data-prod/crypto-bot.db'
 export DATA_DIR='../../data-prod'
 export NODE_ENV=production
 
-# Clear previous prod data for fresh start
-rm -f ../../data-prod/*.json ../../data-prod/*.db 2>/dev/null
+# NOTE: Do NOT clear data on restart - the bot tracks orders by orderId
+# If you need a fresh start, manually delete files in data-prod/
+# rm -f ../../data-prod/*.json ../../data-prod/*.db 2>/dev/null
 
-# Create empty initial files
-echo '[]' > ../../data-prod/strategies.json
-echo '[]' > ../../data-prod/completed-trades.json
-echo '{}' > ../../data-prod/mock-exchange-state.json
+# Ensure data files exist (if not already present)
+[ ! -f ../../data-prod/strategies.json ] && echo '[]' > ../../data-prod/strategies.json
+[ ! -f ../../data-prod/completed-trades.json ] && echo '[]' > ../../data-prod/completed-trades.json
+[ ! -f ../../data-prod/mock-exchange-state.json ] && echo '{}' > ../../data-prod/mock-exchange-state.json
 
 echo "Starting Production environment on port $PORT"
 node index.js

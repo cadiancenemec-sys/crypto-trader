@@ -64,7 +64,7 @@ async function checkMissingOrders() {
             // Buy is filled but no sell order exists! Create it now.
             console.log(`[DCA Safety] Buy order ${buyOrderId} filled but no sell found! Creating sell now...`);
             
-            const sellPrice = binanceOrder.price * (1 + strategy.profitTarget / 100);
+            const sellPrice = Math.round(binanceOrder.price * (1 + strategy.profitTarget / 100) * 100) / 100;
             const mockOrder = await trading.placeOrder(
               symbol,
               'SELL',
@@ -89,10 +89,26 @@ async function checkMissingOrders() {
           }
         }
         
-        // Also check for filled sells that are still marked as pending_sell (verify completion)
+        // Check if pending_sell orders still exist on Binance (or were cancelled)
         if (step.status === 'pending_sell' && step.sellOrderId) {
           const sellOrder = allOrders.find(o => o.orderId == step.sellOrderId);
-          if (sellOrder && sellOrder.status === 'FILLED') {
+          
+          // If the sell order doesn't exist on Binance (was cancelled or never placed), reset the grid step
+          if (!sellOrder) {
+            console.log(`[DCA Safety] Sell order ${step.sellOrderId} not found on Binance, resetting grid step ${step.level}`);
+            tradingDb.updateGridStep(strategy.id, step.level, {
+              status: 'available',
+              orderId: null,
+              buyOrderId: null,
+              sellOrderId: null,
+              filledAt: null,
+              completedAt: null
+            });
+            continue;
+          }
+          
+          // If sell is filled, mark as completed
+          if (sellOrder.status === 'FILLED') {
             // Sell completed - update to completed
             tradingDb.updateGridStep(strategy.id, step.level, {
               status: 'completed',
@@ -168,12 +184,17 @@ async function tick() {
           for (const step of openBuys) {
             if (step.orderId || step.buyOrderId) {
               const orderId = step.orderId || step.buyOrderId;
-              await trading.cancelOrder(strategy.symbol, orderId);
-              tradingDb.updateGridStep(strategy.id, step.level, {
-                status: 'available',
-                orderId: null,
-                buyOrderId: null
-              });
+              // Verify cancellation on Binance before removing from local state
+              const result = await trading.cancelOrderWithVerification(strategy.symbol, orderId);
+              if (result.success) {
+                tradingDb.updateGridStep(strategy.id, step.level, {
+                  status: 'available',
+                  orderId: null,
+                  buyOrderId: null
+                });
+              } else {
+                console.error(`[DCA Bot] Failed to cancel order ${orderId} on Binance:`, result.error);
+              }
             }
           }
           
@@ -213,6 +234,10 @@ async function processStrategy(strategy) {
   const buyOrders = allOrders.filter(o => o.side === 'BUY');
   const sellOrders = allOrders.filter(o => o.side === 'SELL');
   const openOrders = allOrders.filter(o => o.status === 'NEW');
+  
+  // Debug: log order statuses
+  const filledCount = allOrders.filter(o => o.status === 'FILLED').length;
+  console.log(`[DCA Bot] Orders: ${openOrders.length} NEW, ${filledCount} FILLED (total: ${allOrders.length})`);
   
   // 1. Check for filled orders and handle them
   await processFills(strategy, buyOrders, sellOrders);
@@ -384,7 +409,7 @@ async function processFills(strategy, buyOrders, sellOrders) {
       // Get fresh strategy data for profit target and budget
       const freshStrategy = tradingDb.getStrategy(strategy.id);
       
-      const sellPrice = order.price * (1 + freshStrategy.profitTarget / 100);
+      const sellPrice = Math.round(order.price * (1 + freshStrategy.profitTarget / 100) * 100) / 100;
       const orderCost = order.price * order.quantity;
       
       // Deduct from usable budget (money is now in the position)

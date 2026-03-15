@@ -69,17 +69,26 @@ async function getAllOrders(symbol) {
     if (!result) {
       return [];
     }
-    if (Array.isArray(result)) {
-      return result;
+    
+    let orders = result;
+    if (!Array.isArray(result) && typeof result === 'object') {
+      if (Array.isArray(result.data)) orders = result.data;
+      else if (Array.isArray(result.orders)) orders = result.orders;
+      else if (Array.isArray(result.result)) orders = result.result;
+      else {
+        console.log(`[Trading] getAllOrders unexpected response type:`, typeof result);
+        return [];
+      }
     }
-    // If it's an object with orders/data property, extract it
-    if (typeof result === 'object') {
-      if (Array.isArray(result.data)) return result.data;
-      if (Array.isArray(result.orders)) return result.orders;
-      if (Array.isArray(result.result)) return result.result;
-    }
-    console.log(`[Trading] getAllOrders unexpected response type:`, typeof result);
-    return [];
+    
+    // Normalize field names for consistency (Binance uses origQty)
+    return orders.map(o => ({
+      ...o,
+      quantity: o.quantity || o.origQty || o.executedQty || 0,
+      price: o.price || 0,
+      side: o.side || o.type,
+      status: o.status
+    }));
   } catch (e) {
     console.error(`[Trading] Failed to fetch orders:`, e.message);
     return [];
@@ -107,9 +116,15 @@ async function placeOrder(symbol, side, quantity, price) {
     return mockExchange.placeOrder(symbol, side, quantity, price);
   }
   
+  // Round values to Binance precision limits
+  const pricePrecision = 2;  // ETHUSD price: 2 decimals
+  const qtyPrecision = 4;     // ETH quantity: 4 decimals
+  const roundedPrice = Math.round(price * Math.pow(10, pricePrecision)) / Math.pow(10, pricePrecision);
+  const roundedQty = Math.round(quantity * Math.pow(10, qtyPrecision)) / Math.pow(10, qtyPrecision);
+  
   // Real Binance - place limit order
   try {
-    const order = await binance.trading.placeLimitOrder(symbol, side.toUpperCase(), quantity, price);
+    const order = await binance.trading.placeLimitOrder(symbol, side.toUpperCase(), roundedQty, roundedPrice);
     console.log(`[Trading] Placed REAL ${side} order: ${quantity} ${symbol} @ ${price}`);
     return {
       orderId: order.orderId,
@@ -137,6 +152,34 @@ async function cancelOrder(symbol, orderId) {
     console.error(`[Trading] Failed to cancel order:`, e.message);
     throw e;
   }
+}
+
+/**
+ * Cancel an order and verify it was actually removed from Binance
+ * @returns {object} Result with success boolean and details
+ */
+async function cancelOrderWithVerification(symbol, orderId) {
+  // First, cancel the order
+  const cancelResult = await cancelOrder(symbol, orderId);
+  
+  if (USE_MOCK) {
+    return { success: true, cancelResult };
+  }
+  
+  // Wait a moment for Binance to process
+  await new Promise(r => setTimeout(r, 500));
+  
+  // Verify the order is gone
+  const openOrders = await getOpenOrders(symbol);
+  const stillExists = openOrders.some(o => o.orderId === orderId);
+  
+  if (stillExists) {
+    console.error(`[Trading] Order ${orderId} still exists on Binance after cancellation!`);
+    return { success: false, cancelResult, error: 'Order still exists after cancellation' };
+  }
+  
+  console.log(`[Trading] Order ${orderId} successfully cancelled and verified`);
+  return { success: true, cancelResult };
 }
 
 function saveState() {
@@ -181,6 +224,7 @@ module.exports = {
   getOrder,
   placeOrder,
   cancelOrder,
+  cancelOrderWithVerification,
   saveState,
   getState
 };

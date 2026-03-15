@@ -150,20 +150,24 @@ router.put('/strategies/:id', async (req, res) => {
     if (currentStrategy.gridSteps) {
       for (const step of currentStrategy.gridSteps) {
         if (step.status === 'open_buy' && step.orderId) {
-          // Cancel the order (mock or real)
+          // Cancel the order (mock or real) and verify it was removed
           try {
-            await trading.cancelOrder(currentStrategy.symbol, step.orderId);
-            console.log(`[DCA Bot] Cancelled order ${step.orderId} on ${currentStrategy.symbol}`);
+            const result = await trading.cancelOrderWithVerification(currentStrategy.symbol, step.orderId);
+            if (result.success) {
+              console.log(`[DCA Bot] Cancelled and verified order ${step.orderId} on ${currentStrategy.symbol}`);
+              // Only reset grid step after verification
+              tradingDb.updateGridStep(strategyId, step.level, {
+                status: 'available',
+                orderId: null,
+                buyOrderId: null,
+                filledAt: null
+              });
+            } else {
+              console.error(`[DCA Bot] Failed to cancel order ${step.orderId} on Binance:`, result.error);
+            }
           } catch (e) {
             console.error(`[DCA Bot] Failed to cancel order ${step.orderId}:`, e.message);
           }
-          // Reset grid step to available
-          tradingDb.updateGridStep(strategyId, step.level, {
-            status: 'available',
-            orderId: null,
-            buyOrderId: null,
-            filledAt: null
-          });
         }
       }
     }
@@ -464,7 +468,7 @@ router.get('/account', async (req, res) => {
   }
 });
 
-// Cancel a specific order by ID
+// Cancel a specific order by ID (with verification)
 router.delete('/orders/:orderId', async (req, res) => {
   const { orderId } = req.params;
   const { symbol } = req.query;
@@ -474,8 +478,12 @@ router.delete('/orders/:orderId', async (req, res) => {
   }
   
   try {
-    const result = await trading.cancelOrder(symbol, orderId);
-    res.json({ success: true, result });
+    const result = await trading.cancelOrderWithVerification(symbol, orderId);
+    if (result.success) {
+      res.json({ success: true, result: result.cancelResult });
+    } else {
+      res.status(400).json({ error: result.error });
+    }
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

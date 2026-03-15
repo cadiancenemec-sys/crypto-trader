@@ -1,0 +1,359 @@
+[
+  {
+    "id": 4,
+    "symbol": "ETHUSD",
+    "tradeAmount": 0.003,
+    "totalBudget": 50,
+    "usableBudget": null,
+    "profitTarget": 0.5,
+    "gridLevels": 7,
+    "gridSpacing": 3,
+    "startPrice": 2084,
+    "status": "completed",
+    "autoEnd": true,
+    "emergencyDropEnabled": false,
+    "emergencyDropPercent": 5,
+    "emergencyDropMaxOrders": 3,
+    "emergencyDropActive": false,
+    "createdAt": "2026-03-14T21:18:40.122Z",
+    "updatedAt": "2026-03-15T08:21:28.626Z",
+    "gridSteps": [
+      {
+        "level": 0,
+        "price": 2084,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 1,
+        "price": 2081,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 2,
+        "price": 2078,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 3,
+        "price": 2075,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 4,
+        "price": 2072,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 5,
+        "price": 2069,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 6,
+        "price": 2066,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      }
+    ]
+  },
+  {
+    "id": 5,
+    "symbol": "ETHUSD",
+    "tradeAmount": 0.003,
+    "totalBudget": 50,
+    "usableBudget": 50,
+    "profitTarget": 0.5,
+    "gridLevels": 7,
+    "gridSpacing": 3,
+    "startPrice": 2000,
+    "status": "completed",
+    "autoEnd": true,
+    "emergencyDropEnabled": false,
+    "emergencyDropPercent": 5,
+    "emergencyDropMaxOrders": 3,
+    "emergencyDropActive": false,
+    "createdAt": "2026-03-15T00:31:51.324Z",
+    "updatedAt": "2026-03-15T00:33:53.255Z",
+    "gridSteps": [
+      {
+        "level": 0,
+        "price": 2000,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 1,
+        "price": 1997,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 2,
+        "price": 1994,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 3,
+        "price": 1991,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 4,
+        "price": 1988,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 5,
+        "price": 1985,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 6,
+        "price": 1982,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      }
+    ]
+  },
+  {
+    "id": 6,
+    "symbol": "ETHUSD",
+    "tradeAmount": 0.003,
+    "totalBudget": 50,
+    "usableBudget": 50,
+    "profitTarget": 0.5,
+    "gridLevels": 7,
+    "gridSpacing": 3,
+    "startPrice": 2100,
+    "status": "completed",
+    "autoEnd": true,
+    "emergencyDropEnabled": false,
+    "emergencyDropPercent": 5,
+    "emergencyDropMaxOrders": 3,
+    "emergencyDropActive": false,
+    "createdAt": "2026-03-15T08:21:55.046Z",
+    "updatedAt": "2026-03-15T12:02:10.013Z",
+    "gridSteps": [
+      {
+        "level": 0,
+        "price": 2100,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 1,
+        "price": 2097,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 2,
+        "price": 2094,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 3,
+        "price": 2091,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 4,
+        "price": 2088,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 5,
+        "price": 2085,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      },
+      {
+        "level": 6,
+        "price": 2082,
+        "status": "available",
+        "orderId": null,
+        "buyOrderId": null,
+        "sellOrderId": null,
+        "filledAt": null,
+        "completedAt": null
+      }
+    ]
+  },
+  {
+    "id": 7,
+    "symbol": "ETHUSD",
+    "tradeAmount": 0.003,
+    "totalBudget": 50,
+    "usableBudget": 12.029000000000003,
+    "profitTarget": 0.5,
+    "gridLevels": 7,
+    "gridSpacing": 3,
+    "startPrice": 2120,
+    "status": "active",
+    "autoEnd": false,
+    "emergencyDropEnabled": false,
+    "emergencyDropPercent": 5,
+    "emergencyDropMaxOrders": 0,
+    "emergencyDropActive": false,
+    "createdAt": "2026-03-15T12:02:19.554Z",
+    "updatedAt": "2026-03-15T13:45:57.220Z",
+    "gridSteps": [
+      {
+        "level": 0,
+        "price": 2120,
+        "status": "pending_sell",
+        "orderId": 1766123954,
+        "buyOrderId": 1766123954,
+        "filledAt": "2026-03-15T13:45:57.218Z",
+        "completedAt": null
+      },
+      {
+        "level": 1,
+        "price": 2117,
+        "status": "pending_sell",
+        "orderId": 1766123962,
+        "buyOrderId": 1766123962,
+        "filledAt": "2026-03-15T13:45:57.218Z",
+        "completedAt": null
+      },
+      {
+        "level": 2,
+        "price": 2114,
+        "status": "pending_sell",
+        "orderId": 1766123976,
+        "buyOrderId": 1766123976,
+        "filledAt": "2026-03-15T13:45:57.219Z",
+        "completedAt": null
+      },
+      {
+        "level": 3,
+        "price": 2111,
+        "status": "pending_sell",
+        "orderId": 1766123979,
+        "buyOrderId": 1766123979,
+        "filledAt": "2026-03-15T13:45:57.219Z",
+        "completedAt": null
+      },
+      {
+        "level": 4,
+        "price": 2108,
+        "status": "pending_sell",
+        "orderId": 1766123995,
+        "buyOrderId": 1766123995,
+        "filledAt": "2026-03-15T13:45:57.219Z",
+        "completedAt": null
+      },
+      {
+        "level": 5,
+        "price": 2105,
+        "status": "pending_sell",
+        "orderId": 1766124012,
+        "buyOrderId": 1766124012,
+        "filledAt": "2026-03-15T13:45:57.220Z",
+        "completedAt": null
+      },
+      {
+        "level": 6,
+        "price": 2102,
+        "status": "pending_sell",
+        "orderId": 1766124013,
+        "buyOrderId": 1766124013,
+        "filledAt": "2026-03-15T13:45:57.220Z",
+        "completedAt": null
+      }
+    ]
+  }
+]
